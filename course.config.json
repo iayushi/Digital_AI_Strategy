@@ -8,7 +8,7 @@
       "sampleQuestions": [
         { "label": "🎭 Marvel Fan Explanation", "question": "How are the contents of this session related to Digital Platform, AI, and Business Strategy? Explain to a Marvel fan." },
         { "label": "🌍 Black Panther & IT", "question": "If advanced IT like GenAI was available only to residents of Wakanda, would it matter or not?" },
-        { "label": "👶 Explain to a 5-year-old", "question": "Explain the learnings from this session to a five year old." },
+        { "label": "👶 Explain to a 13-year-old", "question": "Explain the learnings from this session to a thirteen year old." },
         { "label": "🦸 Superhero IT Powers", "question": "If any IT was a superpower, what could happen to challenge this superpower?" },
         { "label": "🧱 LEGO Masterpiece", "question": "Compare Digital and AI Strategy, based on this session's readings, to building a LEGO masterpiece." },
         { "label": "🎮 Video Game Platforms", "question": "How would you explain value generation from IT to someone who loves video games?" }
