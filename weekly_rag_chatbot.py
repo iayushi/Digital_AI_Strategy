@@ -1,4 +1,6 @@
 import os
+os.environ["PYTORCH_ENABLE_META_TENSOR"] = "0"
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 import re
 import sys
 import traceback
