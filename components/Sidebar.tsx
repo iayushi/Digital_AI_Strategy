@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SESSIONS } from "@/lib/sessions";
+import { SESSIONS, COURSE_NAME, COURSE_SUBTITLE } from "@/lib/sessions";
 import { MODEL_OPTIONS, LoadStatus, LoadProgress } from "@/lib/webllm";
 import { CLOUD_PROVIDERS, CloudProvider } from "@/lib/cloudapi";
 
@@ -60,8 +60,11 @@ export default function Sidebar({
       <div className="px-4 py-4 border-b border-gray-100">
         <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest">Course</p>
         <h1 className="text-base font-bold text-gray-900 leading-tight mt-0.5">
-          Digital AI Strategy
+          {COURSE_NAME}
         </h1>
+        {COURSE_SUBTITLE && (
+          <p className="text-xs text-gray-400 mt-0.5">{COURSE_SUBTITLE}</p>
+        )}
       </div>
 
       {/* Session selector */}

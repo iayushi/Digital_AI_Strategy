@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { COURSE_NAME, COURSE_SUBTITLE } from "@/lib/sessions";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Digital AI Strategy · Course Chatbot",
-  description: "RAG chatbot for the Digital and AI Strategy course",
+  title: `${COURSE_NAME} · ${COURSE_SUBTITLE}`,
+  description: `RAG chatbot for ${COURSE_NAME}`,
 };
 
 export default function RootLayout({
