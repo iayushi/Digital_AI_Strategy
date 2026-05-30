@@ -5,19 +5,37 @@ import traceback
 from pathlib import Path
 from operator import itemgetter
 
-import pysqlite3
+try:
+    import pysqlite3
+    sys.modules["sqlite3"] = pysqlite3
+except ModuleNotFoundError:
+    import sqlite3  # noqa: F401
+
 import streamlit as st
 from langchain_community.vectorstores import Chroma
-from langchain_classic.output_parsers import StrOutputParser
-from langchain_classic.prompts import ChatPromptTemplate
-from langchain_classic.runnables import RunnableLambda
-from langchain_groq import ChatGroq
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_perplexity import ChatPerplexity
 
-sys.modules["sqlite3"] = pysqlite3
+try:
+    from langchain_groq import ChatGroq
+except ImportError:
+    ChatGroq = None
+
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEmbeddings
+
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    ChatOpenAI = None
+
+try:
+    from langchain_anthropic import ChatAnthropic
+except ImportError:
+    ChatAnthropic = None
+
+try:
+    from langchain_perplexity import ChatPerplexity
+except ImportError:
+    ChatPerplexity = None
+
 os.environ["PYTORCH_ENABLE_META_TENSOR"] = "0"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -146,7 +164,7 @@ def initialize_model(provider: str, api_key: str, model_name: str):
 
 def build_prompt(context, question, week_label):
     context_text = "\n".join([doc.page_content for doc in context["texts"]])
-    prompt_template = f"""
+    return f"""
 Role: You are a helpful assistant for advanced undergraduate students taking the Digital and AI Strategy course.
 Instructions:
 1. Answer using only the provided context from the selected week.
@@ -159,7 +177,6 @@ Context (Week: {week_label}):
 
 Question: {question}
 """
-    return ChatPromptTemplate.from_messages([{"role": "user", "content": prompt_template}]).format_messages()
 
 
 def get_week_description(week_config):
@@ -233,19 +250,6 @@ def main():
             def run_similarity_search(query):
                 return vectorstore.similarity_search(query, k=5)
 
-            def parse_docs(docs):
-                return {"texts": docs}
-
-            chain = (
-                {
-                    "context": itemgetter("question") | RunnableLambda(run_similarity_search) | RunnableLambda(parse_docs),
-                    "question": itemgetter("question"),
-                }
-                | RunnableLambda(lambda kwargs: build_prompt(kwargs["context"], kwargs["question"], selected_week["label"]))
-                | model
-                | StrOutputParser()
-            )
-
             pending_question = None
             if st.session_state.sample_question:
                 pending_question = st.session_state.sample_question
@@ -258,8 +262,14 @@ def main():
             if pending_question:
                 st.session_state.messages.append({"role": "user", "content": pending_question})
                 st.chat_message("user").write(pending_question)
+
                 try:
-                    answer = chain({"question": pending_question})
+                    docs = run_similarity_search(pending_question)
+                    prompt_text = build_prompt({"texts": docs}, pending_question, selected_week["label"])
+                    if hasattr(model, "predict"):
+                        answer = model.predict(prompt_text)
+                    else:
+                        answer = model(prompt_text)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                     st.chat_message("assistant").write(answer)
                 except Exception as exc:
