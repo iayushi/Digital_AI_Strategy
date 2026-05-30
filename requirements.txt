@@ -1,11 +1,10 @@
 streamlit
-pysqlite3
-sentence-transformers
+langchain
 langchain-openai
 langchain-groq
 langchain-huggingface
 langchain-anthropic
 langchain-perplexity
 langchain-community
-langchain-classic
-langchain-core
+pysqlite3
+sentence-transformers
