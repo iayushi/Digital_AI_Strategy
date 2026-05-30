@@ -76,12 +76,20 @@ export default function Home() {
       abortRef.current = false;
 
       try {
-        const { embedQuery } = await import("@/lib/embedder");
-        const { searchWeek } = await import("@/lib/search");
         const { buildMessages } = await import("@/lib/prompt");
 
-        const queryEmbedding = await embedQuery(q);
-        const chunks = await searchWeek(selectedWeek, queryEmbedding);
+        // Retrieve relevant chunks — try neural embedding first, fall back to keyword search
+        let chunks: string[];
+        try {
+          const { embedQuery } = await import("@/lib/embedder");
+          const { searchWeek } = await import("@/lib/search");
+          const queryEmbedding = await embedQuery(q);
+          chunks = await searchWeek(selectedWeek, queryEmbedding);
+        } catch {
+          const { keywordSearch } = await import("@/lib/search");
+          chunks = await keywordSearch(selectedWeek, q);
+        }
+
         const promptMessages = buildMessages(chunks, q);
 
         let fullResponse = "";

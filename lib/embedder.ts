@@ -1,7 +1,16 @@
 import { pipeline, env } from "@xenova/transformers";
 
-// Always fetch models from HuggingFace Hub — never look for local files
+// Always fetch from HuggingFace Hub, never look for local files
 env.allowLocalModels = false;
+
+// Force single-threaded ONNX so SharedArrayBuffer is not required.
+// This lets the embedder work without Cross-Origin-Embedder-Policy headers.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(env as any).backends = (env as any).backends ?? {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(env as any).backends.onnx = (env as any).backends.onnx ?? {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(env as any).backends.onnx.wasm = { ...(env as any).backends.onnx.wasm, numThreads: 1 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EmbedPipeline = any;
@@ -19,6 +28,10 @@ function getPipeline(): Promise<EmbedPipeline> {
     _pipe = p;
     _loading = null;
     return p;
+  }).catch((err: unknown) => {
+    // Reset so the next call can retry rather than returning the same rejection
+    _loading = null;
+    throw err;
   });
 
   return _loading;

@@ -87,3 +87,28 @@ export async function searchWeek(
 export function prefetchWeek(week: number): void {
   loadWeekChunks(week).catch(() => {});
 }
+
+/**
+ * Keyword-overlap fallback search — used when the neural embedder can't load.
+ * Scores chunks by how many unique query words (length > 3) appear in the text.
+ */
+export async function keywordSearch(
+  week: number,
+  query: string,
+  topK = 5
+): Promise<string[]> {
+  const chunks = await loadWeekChunks(week);
+  const words = new Set(
+    query.toLowerCase().split(/\W+/).filter((w) => w.length > 3)
+  );
+
+  const scored = chunks.map((c) => {
+    const lower = c.text.toLowerCase();
+    let score = 0;
+    for (const w of words) if (lower.includes(w)) score++;
+    return { text: c.text, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topK).map((c) => c.text);
+}
