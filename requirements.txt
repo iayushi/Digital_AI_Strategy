@@ -1,0 +1,11 @@
+streamlit
+pysqlite3
+sentence-transformers
+langchain-openai
+langchain-groq
+langchain-huggingface
+langchain-anthropic
+langchain-perplexity
+langchain-community
+langchain-classic
+langchain-core
