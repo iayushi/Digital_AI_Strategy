@@ -63,7 +63,8 @@ export async function streamCloudChat(
   apiKey: string,
   modelName: string,
   messages: ChatMessage[],
-  onToken: (token: string, done: boolean) => void
+  onToken: (token: string, done: boolean) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const config = CLOUD_PROVIDERS[provider];
 
@@ -80,6 +81,7 @@ export async function streamCloudChat(
       temperature: 0.7,
       max_tokens: 1024,
     }),
+    signal,
   });
 
   if (!res.ok) {
