@@ -1,7 +1,8 @@
 // Cloud API streaming for OpenAI-compatible providers.
 // Anthropic is intentionally excluded — it does not support browser CORS.
+// Gemini uses Google's OpenAI-compatible endpoint (free tier available).
 
-export type CloudProvider = "OpenAI" | "Groq" | "Perplexity";
+export type CloudProvider = "OpenAI" | "Groq" | "Perplexity" | "Gemini";
 
 export interface CloudProviderConfig {
   label: string;
@@ -32,6 +33,14 @@ export const CLOUD_PROVIDERS: Record<CloudProvider, CloudProviderConfig> = {
     defaultModel: "sonar-pro",
     keyPrefix: "pplx-",
     keyHint: "Starts with pplx-",
+  },
+  Gemini: {
+    label: "Gemini (Free tier)",
+    // Google's OpenAI-compatible endpoint — uses the same SSE wire format
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    defaultModel: "gemini-2.0-flash",
+    keyPrefix: "AIza",
+    keyHint: "Starts with AIza — get a free key at aistudio.google.com",
   },
 };
 
