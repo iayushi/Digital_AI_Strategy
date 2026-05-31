@@ -1,6 +1,18 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+
+// Detect WebGPU / GPU errors from web-llm — these happen on mobile devices
+// and low-VRAM GPUs that can't sustain inference after the model loads.
+function isGPUError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("gpu") || m.includes("mapasync") || m.includes("device lost") ||
+    m.includes("not loaded") || m.includes("mlcengine") ||
+    m.includes("initialize your engine") || m.includes("createmlcengine") ||
+    m.includes("webgpu") || m.includes("buffer") || m.includes("shader")
+  );
+}
 import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
@@ -139,21 +151,40 @@ export default function Home() {
           try {
             await streamWebLLM(buildMessages(chunks, q), onToken);
           } catch (webllmErr) {
+            document.removeEventListener("visibilitychange", trackVisibility);
+
             if (tabHiddenDuringStream) {
-              // Tab was switched mid-generation — clean up silently.
-              // Abort any in-flight onToken callbacks, remove the user message we
-              // already added to chat, restore the question to the input, and show
-              // a banner so the user knows to press Send again.
+              // Tab was switched — restore question to input silently.
               abortRef.current = true;
               setMessages((prev) => prev.slice(0, -1));
               setInputValue(q);
               setStreamText("");
               setIsStreaming(false);
               setTabSwitchWarning(true);
-              document.removeEventListener("visibilitychange", trackVisibility);
               return;
             }
-            throw webllmErr; // genuine error — let outer catch handle it
+
+            const errMsg = webllmErr instanceof Error ? webllmErr.message : String(webllmErr);
+            if (isGPUError(errMsg)) {
+              // GPU/WebGPU failure — common on mobile and low-VRAM devices.
+              // Reset the engine so the Load Model button reappears.
+              const { resetEngine } = await import("@/lib/webllm");
+              resetEngine();
+              setLoadStatus("idle");
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content:
+                    "⚠️ Your device's GPU couldn't run the AI model — this is common on mobile phones and tablets.\n\nSwitch to Cloud API mode instead. Groq is free (no credit card needed) and very fast.",
+                },
+              ]);
+              setStreamText("");
+              setIsStreaming(false);
+              return;
+            }
+
+            throw webllmErr; // non-GPU error — let outer catch handle it
           } finally {
             document.removeEventListener("visibilitychange", trackVisibility);
           }

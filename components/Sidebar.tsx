@@ -126,6 +126,12 @@ export default function Sidebar({
       {mode === "webllm" && (
         <div className="px-4 py-3 border-b border-gray-100 space-y-3">
 
+          {/* Mobile device warning — hidden on desktop (md+) */}
+          <div className="md:hidden rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs text-orange-800 leading-snug">
+            <p className="font-semibold mb-0.5">📱 Mobile not recommended</p>
+            <p>Browser AI needs a desktop GPU. Switch to <strong>Cloud API</strong> mode — Groq is free and works on any device.</p>
+          </div>
+
           {/* Engine sub-toggle */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Engine</label>

@@ -85,6 +85,16 @@ export async function loadModel(
   }
 }
 
+/**
+ * Reset the engine to idle so the Load Model button reappears after a GPU error.
+ * Call this when inference fails with a WebGPU error on mobile or low-end devices.
+ */
+export function resetEngine(): void {
+  _engine = null;
+  _loadedModelId = null;
+  _status = "idle";
+}
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /**
