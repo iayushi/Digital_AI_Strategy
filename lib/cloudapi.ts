@@ -63,7 +63,8 @@ export async function streamCloudChat(
   apiKey: string,
   modelName: string,
   messages: ChatMessage[],
-  onToken: (token: string, done: boolean) => void
+  onToken: (token: string, done: boolean) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const config = CLOUD_PROVIDERS[provider];
 
@@ -78,8 +79,13 @@ export async function streamCloudChat(
       messages,
       stream: true,
       temperature: 0.7,
+      top_p: 0.9,
+      // Discourage degenerate repetition loops on short/vague prompts (B13).
+      frequency_penalty: 0.5,
+      presence_penalty: 0.3,
       max_tokens: 1024,
     }),
+    signal,
   });
 
   if (!res.ok) {

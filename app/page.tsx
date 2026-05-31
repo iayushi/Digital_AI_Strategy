@@ -4,6 +4,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 // Detect WebGPU / GPU errors from web-llm — these happen on mobile devices
 // and low-VRAM GPUs that can't sustain inference after the model loads.
+// sessionStorage key for the opt-in "remember on this device" API key.
+// sessionStorage (not localStorage) so it is cleared when the tab closes.
+const API_KEY_STORAGE = "dais.cloudApiKey";
+
 function isGPUError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
@@ -12,6 +16,13 @@ function isGPUError(msg: string): boolean {
     m.includes("initialize your engine") || m.includes("createmlcengine") ||
     m.includes("webgpu") || m.includes("buffer") || m.includes("shader")
   );
+}
+
+// Interrupt the WebLLM engine if one is active. Kept at module scope (and
+// behind a dynamic import) so the heavy @mlc-ai/web-llm bundle stays out of
+// the initial load and the React compiler can memoize callers cleanly.
+function interruptActiveEngine(): void {
+  import("@/lib/webllm").then(({ interruptWebLLM }) => interruptWebLLM()).catch(() => {});
 }
 import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
@@ -45,6 +56,30 @@ export default function Home() {
     );
   }, []);
 
+  // Hide first-query latency: prefetch the default week's (small) binary
+  // immediately, and warm the larger embedding model during idle time so the
+  // user isn't waiting on a ~23 MB download the moment they ask their first
+  // question.
+  useEffect(() => {
+    import("@/lib/search").then(({ prefetchWeek }) => prefetchWeek(DEFAULT_WEEK));
+
+    const warm = () => import("@/lib/embedder").then(({ warmEmbedder }) => warmEmbedder());
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+        cancelIdleCallback?: (id: number) => void;
+      }
+    ).requestIdleCallback;
+    const cic = (
+      window as unknown as { cancelIdleCallback?: (id: number) => void }
+    ).cancelIdleCallback;
+    const id = ric ? ric(warm) : window.setTimeout(warm, 1200);
+    return () => {
+      if (ric && cic) cic(id);
+      else window.clearTimeout(id);
+    };
+  }, []);
+
   // ── Web-LLM ──────────────────────────────────────────────────────────────────
   const [webllmModelId, setWebllmModelId] = useState(DEFAULT_MODEL_ID);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("idle");
@@ -72,6 +107,36 @@ export default function Home() {
   const [cloudProvider, setCloudProvider] = useState<CloudProvider>("Groq");
   const [cloudApiKey, setCloudApiKey] = useState("");
   const [cloudModelName, setCloudModelName] = useState("");
+  const [rememberApiKey, setRememberApiKey] = useState(false);
+
+  // Opt-in API-key persistence. We use sessionStorage (cleared when the tab
+  // closes), never localStorage, so a key can't linger on a shared machine.
+  useEffect(() => {
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(API_KEY_STORAGE); } catch {}
+    if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client hydration of an opt-in remembered key
+      setCloudApiKey(saved);
+      setRememberApiKey(true);
+    }
+  }, []);
+
+  const handleCloudApiKeyChange = useCallback((key: string) => {
+    setCloudApiKey(key);
+    if (!rememberApiKey) return;
+    try {
+      if (key) sessionStorage.setItem(API_KEY_STORAGE, key);
+      else sessionStorage.removeItem(API_KEY_STORAGE);
+    } catch {}
+  }, [rememberApiKey]);
+
+  const handleRememberApiKeyChange = useCallback((remember: boolean) => {
+    setRememberApiKey(remember);
+    try {
+      if (remember && cloudApiKey) sessionStorage.setItem(API_KEY_STORAGE, cloudApiKey);
+      else sessionStorage.removeItem(API_KEY_STORAGE);
+    } catch {}
+  }, [cloudApiKey]);
 
   // ── Chat ─────────────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,6 +145,8 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const partialRef = useRef("");
 
   const handleSubmit = useCallback(
     async (question: string) => {
@@ -105,6 +172,9 @@ export default function Home() {
       setStreamText("");
       setIsStreaming(true);
       abortRef.current = false;
+      partialRef.current = "";
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       try {
         // Retrieve relevant chunks — neural embedding with keyword fallback
@@ -115,8 +185,17 @@ export default function Home() {
           const queryEmbedding = await embedQuery(q);
           chunks = await searchWeek(selectedWeek, queryEmbedding);
         } catch {
-          const { keywordSearch } = await import("@/lib/search");
-          chunks = await keywordSearch(selectedWeek, q);
+          // Neural retrieval failed (embedder import/download or WASM init).
+          // Fall back to keyword search; if that also fails, surface a clear,
+          // actionable message instead of leaking a raw stack to the user.
+          try {
+            const { keywordSearch } = await import("@/lib/search");
+            chunks = await keywordSearch(selectedWeek, q);
+          } catch {
+            throw new Error(
+              "Couldn't load this session's course materials. Please check your connection and try again."
+            );
+          }
         }
 
         let fullResponse = "";
@@ -124,9 +203,11 @@ export default function Home() {
           if (abortRef.current) return;
           if (token) {
             fullResponse += token;
+            partialRef.current = fullResponse;
             setStreamText(fullResponse);
           }
           if (done) {
+            partialRef.current = "";
             setMessages((prev) => [...prev, { role: "assistant", content: fullResponse }]);
             setStreamText("");
             setIsStreaming(false);
@@ -137,7 +218,7 @@ export default function Home() {
           // Chrome AI takes a plain string prompt
           const { buildPrompt } = await import("@/lib/prompt");
           const { streamChromeAI } = await import("@/lib/chromeai");
-          await streamChromeAI(buildPrompt(chunks, q), onToken);
+          await streamChromeAI(buildPrompt(chunks, q), onToken, controller.signal);
         } else if (mode === "webllm") {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamWebLLM } = await import("@/lib/webllm");
@@ -149,9 +230,42 @@ export default function Home() {
           document.addEventListener("visibilitychange", trackVisibility);
 
           try {
-            await streamWebLLM(buildMessages(chunks, q), onToken);
+            // Watchdog: WebGPU can be silently suspended when the tab is
+            // backgrounded, leaving streamWebLLM pending forever with no error
+            // thrown. If no token arrives for STALL_MS, reject so the user gets
+            // feedback instead of an endless spinner.
+            const STALL_MS = 30000;
+            let lastActivity = Date.now();
+            const webllmOnToken = (token: string, done: boolean) => {
+              lastActivity = Date.now();
+              onToken(token, done);
+            };
+            await new Promise<void>((resolve, reject) => {
+              const watchdog = setInterval(() => {
+                if (Date.now() - lastActivity > STALL_MS) {
+                  clearInterval(watchdog);
+                  reject(
+                    new Error(
+                      "Generation stalled — the browser may have paused on-device AI while the tab was in the background."
+                    )
+                  );
+                }
+              }, 5000);
+              streamWebLLM(buildMessages(chunks, q), webllmOnToken)
+                .then(() => {
+                  clearInterval(watchdog);
+                  resolve();
+                })
+                .catch((e) => {
+                  clearInterval(watchdog);
+                  reject(e);
+                });
+            });
           } catch (webllmErr) {
             document.removeEventListener("visibilitychange", trackVisibility);
+
+            // User pressed Stop — partial was already finalized in handleStop.
+            if (abortRef.current) return;
 
             if (tabHiddenDuringStream) {
               // Tab was switched — restore question to input silently.
@@ -196,9 +310,11 @@ export default function Home() {
               `API key format looks wrong for ${cloudProvider}. Check the sidebar for the expected prefix.`
             );
           }
-          await streamCloudChat(cloudProvider, cloudApiKey, cloudModelName, buildMessages(chunks, q), onToken);
+          await streamCloudChat(cloudProvider, cloudApiKey, cloudModelName, buildMessages(chunks, q), onToken, controller.signal);
         }
       } catch (err) {
+        // User pressed Stop (fetch/stream aborted) — finalized in handleStop.
+        if (abortRef.current) return;
         const msg = err instanceof Error ? err.message : String(err);
         setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg}` }]);
         setStreamText("");
@@ -209,13 +325,34 @@ export default function Home() {
   );
 
   const handleSampleQuestion = useCallback(
-    (q: string) => { setInputValue(q); handleSubmit(q); },
+    (q: string) => { handleSubmit(q); },
     [handleSubmit]
   );
+
+  const handleStop = () => {
+    // Stop generation everywhere: hide further tokens, abort the cloud
+    // fetch / Chrome AI stream, and interrupt the WebLLM engine.
+    abortRef.current = true;
+    abortControllerRef.current?.abort();
+    interruptActiveEngine();
+
+    // Keep whatever was generated so far as the assistant's (partial) answer.
+    const partial = partialRef.current;
+    partialRef.current = "";
+    setStreamText("");
+    setIsStreaming(false);
+    if (partial.trim()) {
+      setMessages((prev) => [...prev, { role: "assistant", content: partial }]);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // Don't submit (or clear the textarea) while a response is streaming or
+      // when the input is empty — otherwise an Enter keystroke would silently
+      // wipe whatever the user has typed.
+      if (isStreaming || !inputValue.trim()) return;
       handleSubmit(inputValue);
       setInputValue("");
     }
@@ -255,7 +392,9 @@ export default function Home() {
           cloudProvider={cloudProvider}
           onCloudProviderChange={setCloudProvider}
           cloudApiKey={cloudApiKey}
-          onCloudApiKeyChange={setCloudApiKey}
+          onCloudApiKeyChange={handleCloudApiKeyChange}
+          rememberApiKey={rememberApiKey}
+          onRememberApiKeyChange={handleRememberApiKeyChange}
           cloudModelName={cloudModelName}
           onCloudModelNameChange={setCloudModelName}
           onClearChat={() => setMessages([])}
@@ -315,13 +454,23 @@ export default function Home() {
               rows={2}
               className="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 leading-relaxed bg-white"
             />
-            <button
-              onClick={() => { handleSubmit(inputValue); setInputValue(""); }}
-              disabled={isStreaming || !inputValue.trim()}
-              className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {isStreaming ? "…" : "Send"}
-            </button>
+            {isStreaming ? (
+              <button
+                onClick={handleStop}
+                className="shrink-0 rounded-xl bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+                aria-label="Stop generating"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={() => { handleSubmit(inputValue); setInputValue(""); }}
+                disabled={!inputValue.trim()}
+                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Send
+              </button>
+            )}
           </div>
         </div>
       </main>

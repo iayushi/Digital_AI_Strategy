@@ -89,8 +89,46 @@ export function prefetchWeek(week: number): void {
 }
 
 /**
+ * Common English words that carry no retrieval signal. Kept short and
+ * lowercase. Acronyms that collide with these (e.g. "IT") are preserved
+ * separately by detecting their original upper-case form — see extractTerms().
+ */
+const STOPWORDS = new Set([
+  "a", "an", "and", "the", "or", "of", "to", "in", "on", "is", "it", "as", "at",
+  "by", "be", "do", "if", "so", "we", "i", "for", "are", "was", "with", "that",
+  "this", "from", "you", "your", "what", "how", "why", "who", "when", "where",
+  "which", "does", "did", "can", "will", "would", "should", "could", "into",
+  "its", "their", "they", "them", "then", "than", "but", "not", "all", "any",
+  "our", "out", "use", "about", "over", "more", "most", "some", "such", "have",
+  "has", "had", "were", "been", "being", "while", "also", "explain", "please",
+]);
+
+/**
+ * Extract meaningful search terms from a query.
+ * - All-caps tokens of length ≥ 2 are treated as acronyms (AI, IT, BPR, KPI,
+ *   MD, ATC) and always kept, even when they collide with a stopword.
+ * - Other tokens are kept when longer than 2 chars and not a stopword.
+ */
+function extractTerms(query: string): Set<string> {
+  const terms = new Set<string>();
+  for (const tok of query.split(/\W+/)) {
+    if (!tok) continue;
+    const lower = tok.toLowerCase();
+    const isAcronym = tok.length >= 2 && /^[A-Z0-9]+$/.test(tok);
+    if (isAcronym) {
+      terms.add(lower);
+      continue;
+    }
+    if (lower.length > 2 && !STOPWORDS.has(lower)) terms.add(lower);
+  }
+  return terms;
+}
+
+/**
  * Keyword-overlap fallback search — used when the neural embedder can't load.
- * Scores chunks by how many unique query words (length > 3) appear in the text.
+ * Scores chunks by how many unique query terms appear as whole words in the
+ * text. Whole-word matching (rather than substring) prevents short acronyms
+ * like "ai" or "it" from matching inside unrelated words (e.g. "digital").
  */
 export async function keywordSearch(
   week: number,
@@ -98,14 +136,19 @@ export async function keywordSearch(
   topK = 5
 ): Promise<string[]> {
   const chunks = await loadWeekChunks(week);
-  const words = new Set(
-    query.toLowerCase().split(/\W+/).filter((w) => w.length > 3)
-  );
+  const terms = extractTerms(query);
+
+  // Fall back to all sufficiently-long tokens if the query was pure stopwords.
+  if (terms.size === 0) {
+    for (const tok of query.toLowerCase().split(/\W+/)) {
+      if (tok.length > 1) terms.add(tok);
+    }
+  }
 
   const scored = chunks.map((c) => {
-    const lower = c.text.toLowerCase();
+    const chunkWords = new Set(c.text.toLowerCase().split(/\W+/));
     let score = 0;
-    for (const w of words) if (lower.includes(w)) score++;
+    for (const w of terms) if (chunkWords.has(w)) score++;
     return { text: c.text, score };
   });
 
