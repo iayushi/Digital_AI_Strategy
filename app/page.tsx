@@ -4,6 +4,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 // Detect WebGPU / GPU errors from web-llm — these happen on mobile devices
 // and low-VRAM GPUs that can't sustain inference after the model loads.
+// sessionStorage key for the opt-in "remember on this device" API key.
+// sessionStorage (not localStorage) so it is cleared when the tab closes.
+const API_KEY_STORAGE = "dais.cloudApiKey";
+
 function isGPUError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
@@ -103,6 +107,36 @@ export default function Home() {
   const [cloudProvider, setCloudProvider] = useState<CloudProvider>("Groq");
   const [cloudApiKey, setCloudApiKey] = useState("");
   const [cloudModelName, setCloudModelName] = useState("");
+  const [rememberApiKey, setRememberApiKey] = useState(false);
+
+  // Opt-in API-key persistence. We use sessionStorage (cleared when the tab
+  // closes), never localStorage, so a key can't linger on a shared machine.
+  useEffect(() => {
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(API_KEY_STORAGE); } catch {}
+    if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client hydration of an opt-in remembered key
+      setCloudApiKey(saved);
+      setRememberApiKey(true);
+    }
+  }, []);
+
+  const handleCloudApiKeyChange = useCallback((key: string) => {
+    setCloudApiKey(key);
+    if (!rememberApiKey) return;
+    try {
+      if (key) sessionStorage.setItem(API_KEY_STORAGE, key);
+      else sessionStorage.removeItem(API_KEY_STORAGE);
+    } catch {}
+  }, [rememberApiKey]);
+
+  const handleRememberApiKeyChange = useCallback((remember: boolean) => {
+    setRememberApiKey(remember);
+    try {
+      if (remember && cloudApiKey) sessionStorage.setItem(API_KEY_STORAGE, cloudApiKey);
+      else sessionStorage.removeItem(API_KEY_STORAGE);
+    } catch {}
+  }, [cloudApiKey]);
 
   // ── Chat ─────────────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
@@ -358,7 +392,9 @@ export default function Home() {
           cloudProvider={cloudProvider}
           onCloudProviderChange={setCloudProvider}
           cloudApiKey={cloudApiKey}
-          onCloudApiKeyChange={setCloudApiKey}
+          onCloudApiKeyChange={handleCloudApiKeyChange}
+          rememberApiKey={rememberApiKey}
+          onRememberApiKeyChange={handleRememberApiKeyChange}
           cloudModelName={cloudModelName}
           onCloudModelNameChange={setCloudModelName}
           onClearChat={() => setMessages([])}

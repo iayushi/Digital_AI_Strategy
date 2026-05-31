@@ -30,6 +30,8 @@ interface Props {
   onCloudProviderChange: (p: CloudProvider) => void;
   cloudApiKey: string;
   onCloudApiKeyChange: (k: string) => void;
+  rememberApiKey: boolean;
+  onRememberApiKeyChange: (remember: boolean) => void;
   cloudModelName: string;
   onCloudModelNameChange: (m: string) => void;
 
@@ -52,6 +54,7 @@ export default function Sidebar({
   loadStatus, loadProgress, onLoadModel,
   cloudProvider, onCloudProviderChange,
   cloudApiKey, onCloudApiKeyChange,
+  rememberApiKey, onRememberApiKeyChange,
   cloudModelName, onCloudModelNameChange,
   onClearChat,
   onClose,
@@ -249,6 +252,20 @@ export default function Sidebar({
               placeholder="Paste your API key…"
               className="w-full text-sm rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <label className="mt-2 flex items-start gap-2 text-xs text-gray-500 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberApiKey}
+                onChange={(e) => onRememberApiKeyChange(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                Remember on this device
+                <span className="block text-gray-400">
+                  Kept only until you close this tab. Never use on a shared computer.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>
