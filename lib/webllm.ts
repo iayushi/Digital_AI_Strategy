@@ -13,20 +13,20 @@ export const MODEL_OPTIONS: ModelOption[] = [
   {
     id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
     label: "Llama 3.2 · 1B",
-    size: "~879 MB",
-    description: "Most compatible. Lowest VRAM — works on most GPUs.",
+    size: "~0.9 GB VRAM",
+    description: "Most compatible — runs on almost any laptop GPU. Best starting point.",
   },
   {
-    id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
-    label: "Qwen 2.5 · 0.5B",
-    size: "~945 MB",
-    description: "Smallest parameter count. Fast inference.",
+    id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
+    label: "Llama 3.2 · 3B",
+    size: "~2.3 GB VRAM",
+    description: "Recommended. Noticeably better answers; needs a mid-range GPU (~4 GB+).",
   },
   {
     id: "Phi-4-mini-instruct-q4f16_1-MLC",
-    label: "Phi 4 Mini",
-    size: "~3.4 GB",
-    description: "Best reasoning quality. Requires a capable GPU.",
+    label: "Phi 4 Mini · 3.8B",
+    size: "~3.4 GB VRAM",
+    description: "Strongest reasoning, but heaviest. Requires a capable GPU (~6 GB+).",
   },
 ];
 
