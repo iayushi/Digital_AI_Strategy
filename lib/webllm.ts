@@ -113,6 +113,12 @@ export async function streamWebLLM(
     messages,
     stream: true,
     temperature: 0.7,
+    top_p: 0.9,
+    // Penalise repetition. Small/instruct models (Llama-3.2-1B, Phi-4-mini) on
+    // short or vague questions otherwise fall into degenerate loops, repeating
+    // a phrase until max_tokens cuts them off mid-word. See B13.
+    frequency_penalty: 0.5,
+    presence_penalty: 0.3,
     max_tokens: 1024,
   });
 
