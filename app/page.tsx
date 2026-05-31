@@ -209,13 +209,17 @@ export default function Home() {
   );
 
   const handleSampleQuestion = useCallback(
-    (q: string) => { setInputValue(q); handleSubmit(q); },
+    (q: string) => { handleSubmit(q); },
     [handleSubmit]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // Don't submit (or clear the textarea) while a response is streaming or
+      // when the input is empty — otherwise an Enter keystroke would silently
+      // wipe whatever the user has typed.
+      if (isStreaming || !inputValue.trim()) return;
       handleSubmit(inputValue);
       setInputValue("");
     }
