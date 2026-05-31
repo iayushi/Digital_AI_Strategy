@@ -13,14 +13,28 @@ function getLanguageModel(): unknown {
 }
 
 export async function getChromeAIStatus(): Promise<ChromeAIStatus> {
-  const lm = getLanguageModel();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lm = getLanguageModel() as any;
   if (!lm) return "unavailable";
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const caps = await (lm as any).capabilities();
-    if (caps?.available === "readily") return "ready";
-    if (caps?.available === "after-download") return "needs-download";
+    // Current Prompt API (Chrome 129+): LanguageModel.availability()
+    //   → "available" | "downloadable" | "downloading" | "unavailable"
+    if (typeof lm.availability === "function") {
+      const status = await lm.availability();
+      if (status === "available") return "ready";
+      if (status === "downloadable" || status === "downloading") return "needs-download";
+      return "unavailable";
+    }
+
+    // Legacy API (Chrome ≤128): capabilities()
+    //   → { available: "readily" | "after-download" | "no" }
+    if (typeof lm.capabilities === "function") {
+      const caps = await lm.capabilities();
+      if (caps?.available === "readily") return "ready";
+      if (caps?.available === "after-download") return "needs-download";
+    }
+
     return "unavailable";
   } catch {
     return "unavailable";
@@ -34,7 +48,8 @@ export async function getChromeAIStatus(): Promise<ChromeAIStatus> {
  */
 export async function streamChromeAI(
   prompt: string,
-  onToken: (token: string, done: boolean) => void
+  onToken: (token: string, done: boolean) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const lm = getLanguageModel();
   if (!lm) throw new Error("Chrome AI is not available in this browser.");
@@ -42,12 +57,16 @@ export async function streamChromeAI(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = await (lm as any).create();
 
-  const stream = session.promptStreaming(prompt) as ReadableStream<string>;
+  const stream = session.promptStreaming(
+    prompt,
+    signal ? { signal } : undefined
+  ) as ReadableStream<string>;
   const reader = stream.getReader();
   let prevLength = 0;
 
   try {
     while (true) {
+      if (signal?.aborted) break;
       const { done, value } = await reader.read();
       if (done) {
         onToken("", true);

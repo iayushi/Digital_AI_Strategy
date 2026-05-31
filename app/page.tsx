@@ -13,6 +13,13 @@ function isGPUError(msg: string): boolean {
     m.includes("webgpu") || m.includes("buffer") || m.includes("shader")
   );
 }
+
+// Interrupt the WebLLM engine if one is active. Kept at module scope (and
+// behind a dynamic import) so the heavy @mlc-ai/web-llm bundle stays out of
+// the initial load and the React compiler can memoize callers cleanly.
+function interruptActiveEngine(): void {
+  import("@/lib/webllm").then(({ interruptWebLLM }) => interruptWebLLM()).catch(() => {});
+}
 import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
@@ -104,6 +111,8 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const partialRef = useRef("");
 
   const handleSubmit = useCallback(
     async (question: string) => {
@@ -129,6 +138,9 @@ export default function Home() {
       setStreamText("");
       setIsStreaming(true);
       abortRef.current = false;
+      partialRef.current = "";
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       try {
         // Retrieve relevant chunks — neural embedding with keyword fallback
@@ -157,9 +169,11 @@ export default function Home() {
           if (abortRef.current) return;
           if (token) {
             fullResponse += token;
+            partialRef.current = fullResponse;
             setStreamText(fullResponse);
           }
           if (done) {
+            partialRef.current = "";
             setMessages((prev) => [...prev, { role: "assistant", content: fullResponse }]);
             setStreamText("");
             setIsStreaming(false);
@@ -170,7 +184,7 @@ export default function Home() {
           // Chrome AI takes a plain string prompt
           const { buildPrompt } = await import("@/lib/prompt");
           const { streamChromeAI } = await import("@/lib/chromeai");
-          await streamChromeAI(buildPrompt(chunks, q), onToken);
+          await streamChromeAI(buildPrompt(chunks, q), onToken, controller.signal);
         } else if (mode === "webllm") {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamWebLLM } = await import("@/lib/webllm");
@@ -216,6 +230,9 @@ export default function Home() {
           } catch (webllmErr) {
             document.removeEventListener("visibilitychange", trackVisibility);
 
+            // User pressed Stop — partial was already finalized in handleStop.
+            if (abortRef.current) return;
+
             if (tabHiddenDuringStream) {
               // Tab was switched — restore question to input silently.
               abortRef.current = true;
@@ -259,9 +276,11 @@ export default function Home() {
               `API key format looks wrong for ${cloudProvider}. Check the sidebar for the expected prefix.`
             );
           }
-          await streamCloudChat(cloudProvider, cloudApiKey, cloudModelName, buildMessages(chunks, q), onToken);
+          await streamCloudChat(cloudProvider, cloudApiKey, cloudModelName, buildMessages(chunks, q), onToken, controller.signal);
         }
       } catch (err) {
+        // User pressed Stop (fetch/stream aborted) — finalized in handleStop.
+        if (abortRef.current) return;
         const msg = err instanceof Error ? err.message : String(err);
         setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg}` }]);
         setStreamText("");
@@ -275,6 +294,23 @@ export default function Home() {
     (q: string) => { handleSubmit(q); },
     [handleSubmit]
   );
+
+  const handleStop = () => {
+    // Stop generation everywhere: hide further tokens, abort the cloud
+    // fetch / Chrome AI stream, and interrupt the WebLLM engine.
+    abortRef.current = true;
+    abortControllerRef.current?.abort();
+    interruptActiveEngine();
+
+    // Keep whatever was generated so far as the assistant's (partial) answer.
+    const partial = partialRef.current;
+    partialRef.current = "";
+    setStreamText("");
+    setIsStreaming(false);
+    if (partial.trim()) {
+      setMessages((prev) => [...prev, { role: "assistant", content: partial }]);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -382,13 +418,23 @@ export default function Home() {
               rows={2}
               className="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 leading-relaxed bg-white"
             />
-            <button
-              onClick={() => { handleSubmit(inputValue); setInputValue(""); }}
-              disabled={isStreaming || !inputValue.trim()}
-              className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {isStreaming ? "…" : "Send"}
-            </button>
+            {isStreaming ? (
+              <button
+                onClick={handleStop}
+                className="shrink-0 rounded-xl bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+                aria-label="Stop generating"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={() => { handleSubmit(inputValue); setInputValue(""); }}
+                disabled={!inputValue.trim()}
+                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Send
+              </button>
+            )}
           </div>
         </div>
       </main>

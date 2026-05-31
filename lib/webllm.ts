@@ -95,6 +95,15 @@ export function resetEngine(): void {
   _status = "idle";
 }
 
+/**
+ * Interrupt an in-flight generation. The async iterator in streamWebLLM then
+ * completes normally (finish_reason "abort"), so callers must guard their
+ * onToken handler against appending the partial twice.
+ */
+export function interruptWebLLM(): void {
+  void _engine?.interruptGenerate();
+}
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /**
