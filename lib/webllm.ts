@@ -11,22 +11,22 @@ export interface ModelOption {
 
 export const MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "gemma3-1b-it-q4f16_1-MLC",
-    label: "Gemma 3 · 1B ⚡",
-    size: "~711 MB",
-    description: "Smallest VRAM footprint. Fastest to load and run.",
-  },
-  {
     id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
     label: "Llama 3.2 · 1B",
     size: "~879 MB",
-    description: "Balanced speed and answer quality.",
+    description: "Most compatible. Lowest VRAM — works on most GPUs.",
+  },
+  {
+    id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+    label: "Qwen 2.5 · 0.5B",
+    size: "~945 MB",
+    description: "Smallest parameter count. Fast inference.",
   },
   {
     id: "Phi-4-mini-instruct-q4f16_1-MLC",
     label: "Phi 4 Mini",
     size: "~3.4 GB",
-    description: "Best reasoning quality. Requires more VRAM.",
+    description: "Best reasoning quality. Requires a capable GPU.",
   },
 ];
 
