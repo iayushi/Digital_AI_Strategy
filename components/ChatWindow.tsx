@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Markdown from "./Markdown";
 
 export interface Message {
   role: "user" | "assistant";
@@ -18,13 +19,13 @@ function MessageBubble({ msg }: { msg: Message }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
-            ? "bg-blue-600 text-white rounded-br-sm"
+            ? "bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap"
             : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
         }`}
       >
-        {msg.content}
+        {isUser ? msg.content : <Markdown>{msg.content}</Markdown>}
       </div>
     </div>
   );
@@ -56,15 +57,16 @@ export default function ChatWindow({ messages, streamText, isStreaming }: Props)
       {/* Streaming response */}
       {isStreaming && (
         <div className="flex justify-start">
-          <div className="max-w-[80%] rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap bg-white border border-gray-200 text-gray-800 shadow-sm">
-            {streamText || (
+          <div className="max-w-[80%] rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed bg-white border border-gray-200 text-gray-800 shadow-sm">
+            {streamText ? (
+              <Markdown>{streamText}</Markdown>
+            ) : (
               <span className="flex items-center gap-1 text-gray-400">
                 <span className="animate-bounce">●</span>
                 <span className="animate-bounce [animation-delay:0.15s]">●</span>
                 <span className="animate-bounce [animation-delay:0.3s]">●</span>
               </span>
             )}
-            {streamText && <span className="animate-pulse">▍</span>}
           </div>
         </div>
       )}
