@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "highlight.js/styles/github.css";
 import { COURSE_NAME, COURSE_SUBTITLE } from "@/lib/sessions";
 
 const geistSans = Geist({
