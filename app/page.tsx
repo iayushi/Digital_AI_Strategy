@@ -1,29 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-
-// Detect WebGPU / GPU errors from web-llm — these happen on mobile devices
-// and low-VRAM GPUs that can't sustain inference after the model loads.
-// sessionStorage key for the opt-in "remember on this device" API key.
-// sessionStorage (not localStorage) so it is cleared when the tab closes.
-const API_KEY_STORAGE = "dais.cloudApiKey";
-
-function isGPUError(msg: string): boolean {
-  const m = msg.toLowerCase();
-  return (
-    m.includes("gpu") || m.includes("mapasync") || m.includes("device lost") ||
-    m.includes("not loaded") || m.includes("mlcengine") ||
-    m.includes("initialize your engine") || m.includes("createmlcengine") ||
-    m.includes("webgpu") || m.includes("buffer") || m.includes("shader")
-  );
-}
-
-// Interrupt the WebLLM engine if one is active. Kept at module scope (and
-// behind a dynamic import) so the heavy @mlc-ai/web-llm bundle stays out of
-// the initial load and the React compiler can memoize callers cleanly.
-function interruptActiveEngine(): void {
-  import("@/lib/webllm").then(({ interruptWebLLM }) => interruptWebLLM()).catch(() => {});
-}
 import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
@@ -31,6 +8,31 @@ import { SESSIONS, DEFAULT_WEEK, COURSE_NAME } from "@/lib/sessions";
 import { LoadStatus, LoadProgress, DEFAULT_MODEL_ID } from "@/lib/webllm";
 import { CloudProvider } from "@/lib/cloudapi";
 import { ChromeAIStatus } from "@/lib/chromeai";
+
+// sessionStorage key for the opt-in "remember on this device" API key.
+// sessionStorage (not localStorage) so it is cleared when the tab closes.
+const API_KEY_STORAGE = "dais.cloudApiKey";
+
+// Only treat genuine hardware/driver failures as GPU errors.
+// State errors ("not loaded", "engine not ready") must NOT call resetEngine()
+// because the engine is still valid — the user just needs to wait or retry.
+function isGPUError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("mapasync") ||
+    m.includes("device lost") ||
+    m.includes("webgpu") ||
+    m.includes("shader") ||
+    // GPU OOM / general hardware failure — only when "gpu" appears with an error/failure word
+    (m.includes("gpu") && (m.includes("error") || m.includes("fail") || m.includes("memory") || m.includes("lost")))
+  );
+}
+
+// Interrupt the WebLLM engine if one is active.
+// Dynamic import keeps the heavy bundle out of the initial load.
+function interruptActiveEngine(): void {
+  import("@/lib/webllm").then(({ interruptWebLLM }) => interruptWebLLM()).catch(() => {});
+}
 
 export default function Home() {
   // ── Session ──────────────────────────────────────────────────────────────────
@@ -147,6 +149,11 @@ export default function Home() {
   const abortRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const partialRef = useRef("");
+  // Incremented on every new submission and on Stop. onToken callbacks check
+  // their captured id against the current value; stale callbacks (e.g. from an
+  // interruptGenerate() that fired after the next question was already started)
+  // are silently dropped.
+  const generationIdRef = useRef(0);
 
   const handleSubmit = useCallback(
     async (question: string) => {
@@ -173,6 +180,8 @@ export default function Home() {
       setIsStreaming(true);
       abortRef.current = false;
       partialRef.current = "";
+      generationIdRef.current += 1;
+      const myGenId = generationIdRef.current;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -200,7 +209,9 @@ export default function Home() {
 
         let fullResponse = "";
         const onToken = (token: string, done: boolean) => {
-          if (abortRef.current) return;
+          // Drop stale callbacks: from a Stop-triggered interrupt that resolved
+          // after the NEXT generation already started, or from any aborted call.
+          if (generationIdRef.current !== myGenId || abortRef.current) return;
           if (token) {
             fullResponse += token;
             partialRef.current = fullResponse;
@@ -330,8 +341,9 @@ export default function Home() {
   );
 
   const handleStop = () => {
-    // Stop generation everywhere: hide further tokens, abort the cloud
-    // fetch / Chrome AI stream, and interrupt the WebLLM engine.
+    // Invalidate any in-flight onToken callbacks — including ones that will
+    // arrive later when interruptGenerate() resolves asynchronously.
+    generationIdRef.current += 1;
     abortRef.current = true;
     abortControllerRef.current?.abort();
     interruptActiveEngine();
