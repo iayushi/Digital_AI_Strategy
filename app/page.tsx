@@ -45,6 +45,30 @@ export default function Home() {
     );
   }, []);
 
+  // Hide first-query latency: prefetch the default week's (small) binary
+  // immediately, and warm the larger embedding model during idle time so the
+  // user isn't waiting on a ~23 MB download the moment they ask their first
+  // question.
+  useEffect(() => {
+    import("@/lib/search").then(({ prefetchWeek }) => prefetchWeek(DEFAULT_WEEK));
+
+    const warm = () => import("@/lib/embedder").then(({ warmEmbedder }) => warmEmbedder());
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+        cancelIdleCallback?: (id: number) => void;
+      }
+    ).requestIdleCallback;
+    const cic = (
+      window as unknown as { cancelIdleCallback?: (id: number) => void }
+    ).cancelIdleCallback;
+    const id = ric ? ric(warm) : window.setTimeout(warm, 1200);
+    return () => {
+      if (ric && cic) cic(id);
+      else window.clearTimeout(id);
+    };
+  }, []);
+
   // ── Web-LLM ──────────────────────────────────────────────────────────────────
   const [webllmModelId, setWebllmModelId] = useState(DEFAULT_MODEL_ID);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("idle");
@@ -115,8 +139,17 @@ export default function Home() {
           const queryEmbedding = await embedQuery(q);
           chunks = await searchWeek(selectedWeek, queryEmbedding);
         } catch {
-          const { keywordSearch } = await import("@/lib/search");
-          chunks = await keywordSearch(selectedWeek, q);
+          // Neural retrieval failed (embedder import/download or WASM init).
+          // Fall back to keyword search; if that also fails, surface a clear,
+          // actionable message instead of leaking a raw stack to the user.
+          try {
+            const { keywordSearch } = await import("@/lib/search");
+            chunks = await keywordSearch(selectedWeek, q);
+          } catch {
+            throw new Error(
+              "Couldn't load this session's course materials. Please check your connection and try again."
+            );
+          }
         }
 
         let fullResponse = "";
@@ -149,7 +182,37 @@ export default function Home() {
           document.addEventListener("visibilitychange", trackVisibility);
 
           try {
-            await streamWebLLM(buildMessages(chunks, q), onToken);
+            // Watchdog: WebGPU can be silently suspended when the tab is
+            // backgrounded, leaving streamWebLLM pending forever with no error
+            // thrown. If no token arrives for STALL_MS, reject so the user gets
+            // feedback instead of an endless spinner.
+            const STALL_MS = 30000;
+            let lastActivity = Date.now();
+            const webllmOnToken = (token: string, done: boolean) => {
+              lastActivity = Date.now();
+              onToken(token, done);
+            };
+            await new Promise<void>((resolve, reject) => {
+              const watchdog = setInterval(() => {
+                if (Date.now() - lastActivity > STALL_MS) {
+                  clearInterval(watchdog);
+                  reject(
+                    new Error(
+                      "Generation stalled — the browser may have paused on-device AI while the tab was in the background."
+                    )
+                  );
+                }
+              }, 5000);
+              streamWebLLM(buildMessages(chunks, q), webllmOnToken)
+                .then(() => {
+                  clearInterval(watchdog);
+                  resolve();
+                })
+                .catch((e) => {
+                  clearInterval(watchdog);
+                  reject(e);
+                });
+            });
           } catch (webllmErr) {
             document.removeEventListener("visibilitychange", trackVisibility);
 
