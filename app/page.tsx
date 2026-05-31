@@ -63,6 +63,7 @@ export default function Home() {
   const [streamText, setStreamText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const abortRef = useRef(false);
 
   const handleSubmit = useCallback(
@@ -84,6 +85,7 @@ export default function Home() {
         return;
       }
 
+      setTabSwitchWarning(false);
       setMessages((prev) => [...prev, { role: "user", content: q }]);
       setStreamText("");
       setIsStreaming(true);
@@ -124,7 +126,34 @@ export default function Home() {
         } else if (mode === "webllm") {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamWebLLM } = await import("@/lib/webllm");
-          await streamWebLLM(buildMessages(chunks, q), onToken);
+
+          // Track tab visibility during streaming — WebGPU is suspended when
+          // the tab is hidden, causing the inference to fail.
+          let tabHiddenDuringStream = false;
+          const trackVisibility = () => { if (document.hidden) tabHiddenDuringStream = true; };
+          document.addEventListener("visibilitychange", trackVisibility);
+
+          try {
+            await streamWebLLM(buildMessages(chunks, q), onToken);
+          } catch (webllmErr) {
+            if (tabHiddenDuringStream) {
+              // Tab was switched mid-generation — clean up silently.
+              // Abort any in-flight onToken callbacks, remove the user message we
+              // already added to chat, restore the question to the input, and show
+              // a banner so the user knows to press Send again.
+              abortRef.current = true;
+              setMessages((prev) => prev.slice(0, -1));
+              setInputValue(q);
+              setStreamText("");
+              setIsStreaming(false);
+              setTabSwitchWarning(true);
+              document.removeEventListener("visibilitychange", trackVisibility);
+              return;
+            }
+            throw webllmErr; // genuine error — let outer catch handle it
+          } finally {
+            document.removeEventListener("visibilitychange", trackVisibility);
+          }
         } else {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamCloudChat, validateApiKey } = await import("@/lib/cloudapi");
@@ -193,6 +222,23 @@ export default function Home() {
         <SampleQuestions session={currentSession} onSelect={handleSampleQuestion} disabled={isStreaming} />
 
         <ChatWindow messages={messages} streamText={streamText} isStreaming={isStreaming} />
+
+        {/* Tab-switch warning banner — only shown after a Web-LLM tab-switch interruption */}
+        {tabSwitchWarning && (
+          <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 flex items-center justify-between shrink-0">
+            <p className="text-xs text-amber-800 leading-snug">
+              ⚠️ <strong>Generation stopped</strong> — the browser paused AI when you left this tab.
+              Your question is ready below. Press <strong>Send</strong> to try again.
+            </p>
+            <button
+              onClick={() => setTabSwitchWarning(false)}
+              className="ml-3 shrink-0 text-amber-500 hover:text-amber-700 text-sm leading-none"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
           <div className="flex gap-2 items-end">

@@ -104,7 +104,9 @@ export default function Sidebar({
           </button>
         </div>
         <p className="text-xs text-gray-400 mt-1.5">
-          {mode === "webllm" ? "Runs locally in your browser. Free, private." : "Your API key is used client-side only."}
+          {mode === "webllm"
+            ? "Runs locally in your browser. Free, private. Keep this tab active while generating."
+            : "Your API key is used client-side only."}
         </p>
       </div>
 
