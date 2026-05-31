@@ -34,6 +34,7 @@ interface Props {
   onCloudModelNameChange: (m: string) => void;
 
   onClearChat: () => void;
+  onClose: () => void;
 }
 
 const CHROME_STATUS_LABEL: Record<ChromeAIStatus, { text: string; cls: string }> = {
@@ -53,6 +54,7 @@ export default function Sidebar({
   cloudApiKey, onCloudApiKeyChange,
   cloudModelName, onCloudModelNameChange,
   onClearChat,
+  onClose,
 }: Props) {
   const providerConfig = CLOUD_PROVIDERS[cloudProvider];
   const modelOption = MODEL_OPTIONS.find((m) => m.id === webllmModelId) ?? MODEL_OPTIONS[0];
@@ -64,12 +66,22 @@ export default function Sidebar({
   const chromeAvailable = chromeAIStatus === "ready" || chromeAIStatus === "needs-download";
 
   return (
-    <aside className="w-72 bg-white border-r border-gray-200 flex flex-col overflow-y-auto shrink-0">
+    <aside className="h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
       {/* Header */}
-      <div className="px-4 py-4 border-b border-gray-100">
-        <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest">Course</p>
-        <h1 className="text-base font-bold text-gray-900 leading-tight mt-0.5">{COURSE_NAME}</h1>
-        {COURSE_SUBTITLE && <p className="text-xs text-gray-400 mt-0.5">{COURSE_SUBTITLE}</p>}
+      <div className="px-4 py-4 border-b border-gray-100 flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest">Course</p>
+          <h1 className="text-base font-bold text-gray-900 leading-tight mt-0.5">{COURSE_NAME}</h1>
+          {COURSE_SUBTITLE && <p className="text-xs text-gray-400 mt-0.5">{COURSE_SUBTITLE}</p>}
+        </div>
+        {/* Close button — mobile only */}
+        <button
+          onClick={onClose}
+          className="md:hidden mt-0.5 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 shrink-0"
+          aria-label="Close menu"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Session selector */}

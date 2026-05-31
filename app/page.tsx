@@ -13,9 +13,12 @@ export default function Home() {
   // ── Session ──────────────────────────────────────────────────────────────────
   const [selectedWeek, setSelectedWeek] = useState(DEFAULT_WEEK);
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const handleWeekChange = useCallback((week: number) => {
     setSelectedWeek(week);
     setMessages([]);
+    setSidebarOpen(false); // auto-close drawer on mobile after session change
     import("@/lib/search").then(({ prefetchWeek }) => prefetchWeek(week));
   }, []);
 
@@ -190,33 +193,63 @@ export default function Home() {
   const currentSession = SESSIONS.find((s) => s.week === selectedWeek) ?? SESSIONS[0];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar
-        selectedWeek={selectedWeek}
-        onWeekChange={handleWeekChange}
-        mode={mode}
-        onModeChange={setMode}
-        browserEngine={browserEngine}
-        onBrowserEngineChange={setBrowserEngine}
-        chromeAIStatus={chromeAIStatus}
-        webllmModelId={webllmModelId}
-        onWebllmModelChange={handleWebllmModelChange}
-        loadStatus={loadStatus}
-        loadProgress={loadProgress}
-        onLoadModel={handleLoadModel}
-        cloudProvider={cloudProvider}
-        onCloudProviderChange={setCloudProvider}
-        cloudApiKey={cloudApiKey}
-        onCloudApiKeyChange={setCloudApiKey}
-        cloudModelName={cloudModelName}
-        onCloudModelNameChange={setCloudModelName}
-        onClearChat={() => setMessages([])}
-      />
+    // h-dvh = dynamic viewport height — correctly handles mobile browser chrome (address bar)
+    <div className="flex h-dvh overflow-hidden bg-gray-50">
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-200 bg-white shrink-0">
-          <p className="text-xs text-gray-500">Course · {COURSE_NAME}</p>
-          <h2 className="text-sm font-semibold text-gray-800 mt-0.5">{currentSession.title}</h2>
+      {/* ── Mobile overlay backdrop ── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar — fixed drawer on mobile, static column on desktop ── */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-72 shrink-0 transition-transform duration-200 ease-in-out md:static md:z-auto md:translate-x-0 md:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <Sidebar
+          selectedWeek={selectedWeek}
+          onWeekChange={handleWeekChange}
+          mode={mode}
+          onModeChange={setMode}
+          browserEngine={browserEngine}
+          onBrowserEngineChange={setBrowserEngine}
+          chromeAIStatus={chromeAIStatus}
+          webllmModelId={webllmModelId}
+          onWebllmModelChange={handleWebllmModelChange}
+          loadStatus={loadStatus}
+          loadProgress={loadProgress}
+          onLoadModel={handleLoadModel}
+          cloudProvider={cloudProvider}
+          onCloudProviderChange={setCloudProvider}
+          cloudApiKey={cloudApiKey}
+          onCloudApiKeyChange={setCloudApiKey}
+          cloudModelName={cloudModelName}
+          onCloudModelNameChange={setCloudModelName}
+          onClearChat={() => setMessages([])}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </div>
+
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Session header with hamburger on mobile */}
+        <div className="px-4 py-3 border-b border-gray-200 bg-white shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden -ml-1 p-2 rounded-lg hover:bg-gray-100 text-gray-600 shrink-0"
+            aria-label="Open settings"
+          >
+            <svg width="18" height="14" viewBox="0 0 18 14" fill="currentColor">
+              <rect width="18" height="2" rx="1"/>
+              <rect y="6" width="18" height="2" rx="1"/>
+              <rect y="12" width="18" height="2" rx="1"/>
+            </svg>
+          </button>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Course · {COURSE_NAME}</p>
+            <h2 className="text-sm font-semibold text-gray-800 mt-0.5 truncate">{currentSession.title}</h2>
+          </div>
         </div>
 
         <SampleQuestions session={currentSession} onSelect={handleSampleQuestion} disabled={isStreaming} />

@@ -23,7 +23,7 @@ export default function SampleQuestions({ session, onSelect, disabled }: Props) 
       </button>
 
       {open && (
-        <div className="px-4 pb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="px-4 pb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {session.sampleQuestions.map((sq) => (
             <button
               key={sq.label}
