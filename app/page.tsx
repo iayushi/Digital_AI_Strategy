@@ -241,11 +241,13 @@ export default function Home() {
           document.addEventListener("visibilitychange", trackVisibility);
 
           try {
-            // Watchdog: WebGPU can be silently suspended when the tab is
-            // backgrounded, leaving streamWebLLM pending forever with no error
-            // thrown. If no token arrives for STALL_MS, reject so the user gets
-            // feedback instead of an endless spinner.
-            const STALL_MS = 30000;
+            // Watchdog: guards against a truly silent stall (tab backgrounded
+            // with WebGPU suspended and no error thrown). 90 s gives ample time
+            // for first-token generation even on slow/integrated GPUs.
+            // IMPORTANT: when the watchdog fires it also interrupts the engine so
+            // the abandoned streamWebLLM promise doesn't keep running as a zombie
+            // (a zombie that then conflicts with the next reload/generation).
+            const STALL_MS = 90_000;
             let lastActivity = Date.now();
             const webllmOnToken = (token: string, done: boolean) => {
               lastActivity = Date.now();
@@ -255,10 +257,11 @@ export default function Home() {
               const watchdog = setInterval(() => {
                 if (Date.now() - lastActivity > STALL_MS) {
                   clearInterval(watchdog);
+                  // Kill the zombie generation before rejecting so the engine is
+                  // free for subsequent reload/generation attempts.
+                  interruptActiveEngine();
                   reject(
-                    new Error(
-                      "Generation stalled — the browser may have paused on-device AI while the tab was in the background."
-                    )
+                    new Error("__stall__")
                   );
                 }
               }, 5000);
@@ -290,9 +293,32 @@ export default function Home() {
             }
 
             const errMsg = webllmErr instanceof Error ? webllmErr.message : String(webllmErr);
-            if (isGPUError(errMsg)) {
-              // GPU/WebGPU failure — common on mobile and low-VRAM devices.
-              // Reset the engine so the Load Model button reappears.
+
+            // Watchdog stall — model is loaded but generation produced nothing
+            // for 90 s. The engine has been interrupted; the user can try again.
+            if (errMsg === "__stall__") {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content:
+                    "⚠️ No response after 90 seconds. The on-device model may be under heavy load or the GPU context was paused.\n\n**Try one of these:**\n• Ask the question again — subsequent generations are usually faster\n• Switch to **Cloud API** mode (Groq is free and responds in seconds)",
+                },
+              ]);
+              setStreamText("");
+              setIsStreaming(false);
+              return;
+            }
+
+            // web-llm engine state error — the model needs a reload.
+            // Caused by: zombie generation conflicting with a reload, or the
+            // WebGPU context being invalidated without a hardware GPU error.
+            if (
+              errMsg.toLowerCase().includes("mlcengine") ||
+              errMsg.toLowerCase().includes("createmlcengine") ||
+              errMsg.toLowerCase().includes("not loaded before") ||
+              errMsg.toLowerCase().includes("initialize your engine")
+            ) {
               const { resetEngine } = await import("@/lib/webllm");
               resetEngine();
               setLoadStatus("idle");
@@ -301,7 +327,7 @@ export default function Home() {
                 {
                   role: "assistant",
                   content:
-                    "⚠️ Your device's GPU couldn't run the AI model — this is common on mobile phones and tablets.\n\nSwitch to Cloud API mode instead. Groq is free (no credit card needed) and very fast.",
+                    "⚠️ The browser AI engine lost its state. Press **Load Model** in the sidebar to reload it, then try again.",
                 },
               ]);
               setStreamText("");
@@ -309,7 +335,25 @@ export default function Home() {
               return;
             }
 
-            throw webllmErr; // non-GPU error — let outer catch handle it
+            if (isGPUError(errMsg)) {
+              // GPU/WebGPU hardware failure — common on mobile and low-VRAM devices.
+              const { resetEngine } = await import("@/lib/webllm");
+              resetEngine();
+              setLoadStatus("idle");
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content:
+                    "⚠️ Your device's GPU couldn't run the AI model — this is common on mobile phones and tablets.\n\nSwitch to **Cloud API** mode instead. Groq is free (no credit card needed) and very fast.",
+                },
+              ]);
+              setStreamText("");
+              setIsStreaming(false);
+              return;
+            }
+
+            throw webllmErr; // unrecognised error — let outer catch show it
           } finally {
             document.removeEventListener("visibilitychange", trackVisibility);
           }
