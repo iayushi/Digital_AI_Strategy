@@ -257,12 +257,12 @@ export default function Home() {
               const watchdog = setInterval(() => {
                 if (Date.now() - lastActivity > STALL_MS) {
                   clearInterval(watchdog);
-                  // Kill the zombie generation before rejecting so the engine is
-                  // free for subsequent reload/generation attempts.
-                  interruptActiveEngine();
-                  reject(
-                    new Error("__stall__")
-                  );
+                  // The stall catch-handler calls interruptAndResetEngine() which
+                  // interrupts the engine while it is still non-null, then nulls it.
+                  // Do NOT call interruptActiveEngine() here — by the time the
+                  // dynamic import resolves, the handler may have already nulled
+                  // _engine, making the interrupt a no-op.
+                  reject(new Error("__stall__"));
                 }
               }, 5000);
               streamWebLLM(buildMessages(chunks, q), webllmOnToken)
@@ -294,15 +294,21 @@ export default function Home() {
 
             const errMsg = webllmErr instanceof Error ? webllmErr.message : String(webllmErr);
 
-            // Watchdog stall — model is loaded but generation produced nothing
-            // for 90 s. The engine has been interrupted; the user can try again.
+            const { interruptAndResetEngine } = await import("@/lib/webllm");
+
+            // Watchdog timeout — 90 s with no tokens.
+            // interruptAndResetEngine() interrupts the zombie generation (while
+            // _engine is still non-null) then nulls it, so the next Load Model
+            // click creates a fresh MLCEngine without conflict.
             if (errMsg === "__stall__") {
+              interruptAndResetEngine();
+              setLoadStatus("idle");
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "assistant",
                   content:
-                    "⚠️ No response after 90 seconds. The on-device model may be under heavy load or the GPU context was paused.\n\n**Try one of these:**\n• Ask the question again — subsequent generations are usually faster\n• Switch to **Cloud API** mode (Groq is free and responds in seconds)",
+                    "⚠️ No response in 90 seconds — the engine has been reset.\n\nPress **Load Model** to reload and try again, or switch to **Cloud API** mode (Groq is free and responds in seconds).",
                 },
               ]);
               setStreamText("");
@@ -310,17 +316,15 @@ export default function Home() {
               return;
             }
 
-            // web-llm engine state error — the model needs a reload.
-            // Caused by: zombie generation conflicting with a reload, or the
-            // WebGPU context being invalidated without a hardware GPU error.
+            // web-llm engine state error — zombie/reload conflict or invalidated
+            // WebGPU context.
             if (
               errMsg.toLowerCase().includes("mlcengine") ||
               errMsg.toLowerCase().includes("createmlcengine") ||
               errMsg.toLowerCase().includes("not loaded before") ||
               errMsg.toLowerCase().includes("initialize your engine")
             ) {
-              const { resetEngine } = await import("@/lib/webllm");
-              resetEngine();
+              interruptAndResetEngine();
               setLoadStatus("idle");
               setMessages((prev) => [
                 ...prev,
@@ -337,8 +341,7 @@ export default function Home() {
 
             if (isGPUError(errMsg)) {
               // GPU/WebGPU hardware failure — common on mobile and low-VRAM devices.
-              const { resetEngine } = await import("@/lib/webllm");
-              resetEngine();
+              interruptAndResetEngine();
               setLoadStatus("idle");
               setMessages((prev) => [
                 ...prev,

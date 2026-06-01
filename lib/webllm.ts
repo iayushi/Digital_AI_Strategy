@@ -87,7 +87,6 @@ export async function loadModel(
 
 /**
  * Reset the engine to idle so the Load Model button reappears after a GPU error.
- * Call this when inference fails with a WebGPU error on mobile or low-end devices.
  */
 export function resetEngine(): void {
   _engine = null;
@@ -96,9 +95,22 @@ export function resetEngine(): void {
 }
 
 /**
- * Interrupt an in-flight generation. The async iterator in streamWebLLM then
- * completes normally (finish_reason "abort"), so callers must guard their
- * onToken handler against appending the partial twice.
+ * Interrupt any in-flight generation then immediately reset the engine.
+ * Calling interruptGenerate() while _engine is still non-null ensures the GPU
+ * command is actually sent. We null _engine afterwards so the next loadModel()
+ * call creates a fresh MLCEngine rather than reusing the one that was busy —
+ * reusing a busy engine (e.g. after a watchdog timeout) causes web-llm to
+ * throw "Model not loaded before trying to complete ChatCompletionRequest".
+ */
+export function interruptAndResetEngine(): void {
+  void _engine?.interruptGenerate();
+  _engine = null;
+  _loadedModelId = null;
+  _status = "idle";
+}
+
+/**
+ * Interrupt an in-flight generation without resetting.
  */
 export function interruptWebLLM(): void {
   void _engine?.interruptGenerate();
