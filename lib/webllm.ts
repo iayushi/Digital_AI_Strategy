@@ -81,6 +81,18 @@ export async function loadModel(
     _status = "ready";
   } catch (err) {
     _status = "error";
+    // The engine can be left unrecoverable (e.g. the WebGPU device was lost
+    // while the tab was backgrounded). Tear it down so the next loadModel()
+    // builds a FRESH MLCEngine instead of reusing the broken one — otherwise
+    // every "Retry Load" reuses the wedged engine and silently fails again.
+    const broken = _engine;
+    _engine = null;
+    _loadedModelId = null;
+    if (broken) {
+      // Best-effort GPU teardown; don't await — a wedged device can make
+      // unload() hang, and nulling above already guarantees a clean retry.
+      Promise.resolve().then(() => broken.unload()).catch(() => {});
+    }
     throw err;
   }
 }
@@ -101,12 +113,25 @@ export function resetEngine(): void {
  * call creates a fresh MLCEngine rather than reusing the one that was busy —
  * reusing a busy engine (e.g. after a watchdog timeout) causes web-llm to
  * throw "Model not loaded before trying to complete ChatCompletionRequest".
+ *
+ * We also kick off a best-effort unload() to release the old WebGPU device and
+ * its ~GBs of model memory. It is intentionally NOT awaited: after a background
+ * suspension the device can be wedged and unload() may hang, but the next
+ * loadModel() must not be blocked on it (we already dropped the reference).
  */
 export function interruptAndResetEngine(): void {
-  void _engine?.interruptGenerate();
+  const old = _engine;
   _engine = null;
   _loadedModelId = null;
   _status = "idle";
+  if (old) {
+    try {
+      old.interruptGenerate();
+    } catch {
+      /* ignore */
+    }
+    Promise.resolve().then(() => old.unload()).catch(() => {});
+  }
 }
 
 /**

@@ -92,10 +92,51 @@ export default function Home() {
     setLoadProgress({ text: "Initialising…", progress: 0 });
     try {
       const { loadModel } = await import("@/lib/webllm");
-      await loadModel(webllmModelId, (p) => setLoadProgress(p));
+
+      // Load watchdog: a reload can hang indefinitely if the WebGPU device was
+      // wedged by a background suspension — the user just sees a frozen 0%
+      // spinner ("nothing happens"). Treat *no progress* for LOAD_STALL_MS as a
+      // failure. We track stall (not total time) so a genuinely slow first-time
+      // download (~hundreds of MB) is never killed mid-progress.
+      const LOAD_STALL_MS = 60_000;
+      let lastProgressAt = Date.now();
+      await new Promise<void>((resolve, reject) => {
+        const watchdog = setInterval(() => {
+          if (Date.now() - lastProgressAt > LOAD_STALL_MS) {
+            clearInterval(watchdog);
+            reject(new Error("__load_stall__"));
+          }
+        }, 5000);
+        loadModel(webllmModelId, (p) => {
+          lastProgressAt = Date.now();
+          setLoadProgress(p);
+        })
+          .then(() => {
+            clearInterval(watchdog);
+            resolve();
+          })
+          .catch((e) => {
+            clearInterval(watchdog);
+            reject(e);
+          });
+      });
       setLoadStatus("ready");
     } catch (err) {
+      // Discard any half-initialised/wedged engine so the next click starts
+      // from a fresh MLCEngine instead of silently failing again.
+      const { interruptAndResetEngine } = await import("@/lib/webllm");
+      interruptAndResetEngine();
       setLoadStatus("error");
+      const stalled = err instanceof Error && err.message === "__load_stall__";
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: stalled
+            ? "⚠️ The model didn't finish loading — the GPU may have been paused (e.g. the tab was in the background) or run low on memory.\n\nPress **Load Model** to try again, or switch to **Cloud API** mode (Groq is free and responds in seconds)."
+            : "⚠️ The browser AI model failed to load on this device.\n\nPress **Load Model** to try again, or switch to **Cloud API** mode (Groq is free and responds in seconds).",
+        },
+      ]);
       console.error("Web-LLM load error:", err);
     }
   }, [webllmModelId]);
@@ -283,7 +324,11 @@ export default function Home() {
 
             if (tabHiddenDuringStream) {
               // Tab was switched — restore question to input silently.
+              // Interrupt the abandoned generation so its engine lock is freed;
+              // otherwise the next Send can hit "Model not loaded before trying
+              // to complete ChatCompletionRequest" on a still-busy engine.
               abortRef.current = true;
+              interruptActiveEngine();
               setMessages((prev) => prev.slice(0, -1));
               setInputValue(q);
               setStreamText("");
