@@ -5,8 +5,9 @@ import { SESSIONS, COURSE_NAME, COURSE_SUBTITLE } from "@/lib/sessions";
 import { MODEL_OPTIONS, LoadStatus, LoadProgress } from "@/lib/webllm";
 import { CLOUD_PROVIDERS, CloudProvider } from "@/lib/cloudapi";
 import { ChromeAIStatus } from "@/lib/chromeai";
+import { FreeTrialSession, formatMicroUsd } from "@/lib/freetrial";
 
-export type Mode = "webllm" | "cloud";
+export type Mode = "webllm" | "cloud" | "freetrial";
 export type BrowserEngine = "webllm" | "chrome";
 
 interface Props {
@@ -35,6 +36,14 @@ interface Props {
   cloudModelName: string;
   onCloudModelNameChange: (m: string) => void;
 
+  freeTrialSession: FreeTrialSession | null;
+  freeTrialCode: string;
+  onFreeTrialCodeChange: (code: string) => void;
+  onFreeTrialLogin: () => void;
+  onFreeTrialLogout: () => void;
+  freeTrialBusy: boolean;
+  freeTrialError: string | null;
+
   onClearChat: () => void;
   onClose: () => void;
 }
@@ -56,6 +65,8 @@ export default function Sidebar({
   cloudApiKey, onCloudApiKeyChange,
   rememberApiKey, onRememberApiKeyChange,
   cloudModelName, onCloudModelNameChange,
+  freeTrialSession, freeTrialCode, onFreeTrialCodeChange, onFreeTrialLogin, onFreeTrialLogout,
+  freeTrialBusy, freeTrialError,
   onClearChat,
   onClose,
 }: Props) {
@@ -117,11 +128,19 @@ export default function Sidebar({
           >
             ☁️ Cloud API
           </button>
+          <button
+            onClick={() => onModeChange("freetrial")}
+            className={`flex-1 py-2 text-xs font-medium transition-colors border-l border-gray-200 ${mode === "freetrial" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          >
+            🪙 Free Trial
+          </button>
         </div>
         <p className="text-xs text-gray-400 mt-1.5">
           {mode === "webllm"
             ? "Runs locally in your browser. Free, private. Keep this tab active while generating."
-            : "Your API key is used client-side only."}
+            : mode === "cloud"
+            ? "Your API key is used client-side only."
+            : "A small starter credit funded by the course — no key needed until it runs out."}
         </p>
       </div>
 
@@ -280,6 +299,49 @@ export default function Sidebar({
               className="w-full text-sm rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+        </div>
+      )}
+
+      {/* ── Free Trial panel ──────────────────────────────────── */}
+      {mode === "freetrial" && (
+        <div className="px-4 py-3 border-b border-gray-100 space-y-3">
+          {freeTrialSession ? (
+            <>
+              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-xs text-green-800">
+                <p className="font-medium">✓ Logged in as {freeTrialSession.name}</p>
+                <p className="mt-1">{formatMicroUsd(freeTrialSession.remainingMicroUsd)} of starter credit left</p>
+              </div>
+              <button
+                onClick={onFreeTrialLogout}
+                className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Switch student
+              </button>
+            </>
+          ) : (
+            <>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Access code
+              </label>
+              <input
+                type="text"
+                value={freeTrialCode}
+                onChange={(e) => onFreeTrialCodeChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") onFreeTrialLogin(); }}
+                placeholder="Enter the code your instructor gave you"
+                disabled={freeTrialBusy}
+                className="w-full text-sm rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              />
+              <button
+                onClick={onFreeTrialLogin}
+                disabled={freeTrialBusy || !freeTrialCode.trim()}
+                className="w-full py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {freeTrialBusy ? "Checking…" : "Start Free Trial"}
+              </button>
+              {freeTrialError && <p className="text-xs text-red-600">{freeTrialError}</p>}
+            </>
+          )}
         </div>
       )}
 

@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // NOTE: version-2 only. Production (main) stays `output: "export"` — a
+  // static site with no server. This branch adds a real credit system that
+  // needs a server-side route (holds the Anthropic API key, enforces
+  // per-student budgets), so the static export is dropped here.
   turbopack: {
     // @xenova/transformers imports the Node built-ins `fs`/`path`/`url` and reads
     // them with `Object.keys(...)` at module-eval time. Its package `browser`

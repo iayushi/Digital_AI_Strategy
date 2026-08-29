@@ -4,12 +4,11 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
-import StudentGate from "@/components/StudentGate";
 import { SESSIONS, DEFAULT_WEEK, COURSE_NAME } from "@/lib/sessions";
 import { LoadStatus, LoadProgress, DEFAULT_MODEL_ID } from "@/lib/webllm";
 import { CloudProvider } from "@/lib/cloudapi";
 import { ChromeAIStatus } from "@/lib/chromeai";
-import { getLoggedInStudentId, loginAsStudent, logoutStudent, getCredits, spendCredit, resetCredits } from "@/lib/credits";
+import { FreeTrialSession, formatMicroUsd, getFreeTrialSession, loginFreeTrial, logoutFreeTrial, streamFreeTrial } from "@/lib/freetrial";
 
 // sessionStorage key for the opt-in "remember on this device" API key.
 // sessionStorage (not localStorage) so it is cleared when the tab closes.
@@ -37,36 +36,35 @@ function interruptActiveEngine(): void {
 }
 
 export default function Home() {
-  // ── Pilot-test student credits ──────────────────────────────────────────────
-  const [studentId, setStudentId] = useState<string | null>(null);
-  const [credits, setCredits] = useState(0);
-  const [gateChecked, setGateChecked] = useState(false);
+  // ── Free Trial (server-funded credits) ──────────────────────────────────────
+  const [freeTrialSession, setFreeTrialSession] = useState<FreeTrialSession | null>(null);
+  const [freeTrialCode, setFreeTrialCode] = useState("");
+  const [freeTrialBusy, setFreeTrialBusy] = useState(false);
+  const [freeTrialError, setFreeTrialError] = useState<string | null>(null);
 
+  // Restore an existing server session (HttpOnly cookie) on load, if any.
   useEffect(() => {
-    const id = getLoggedInStudentId();
-    if (id) {
-      setStudentId(id);
-      setCredits(getCredits(id));
+    getFreeTrialSession().then(setFreeTrialSession).catch(() => {});
+  }, []);
+
+  const handleFreeTrialLogin = useCallback(async () => {
+    setFreeTrialBusy(true);
+    setFreeTrialError(null);
+    try {
+      const session = await loginFreeTrial(freeTrialCode);
+      setFreeTrialSession(session);
+      setFreeTrialCode("");
+    } catch (err) {
+      setFreeTrialError(err instanceof Error ? err.message : "Login failed.");
+    } finally {
+      setFreeTrialBusy(false);
     }
-    setGateChecked(true);
-  }, []);
+  }, [freeTrialCode]);
 
-  const handleStudentLogin = useCallback((id: string) => {
-    loginAsStudent(id);
-    setStudentId(id);
-    setCredits(getCredits(id));
+  const handleFreeTrialLogout = useCallback(() => {
+    logoutFreeTrial();
+    setFreeTrialSession(null);
   }, []);
-
-  const handleStudentLogout = useCallback(() => {
-    logoutStudent();
-    setStudentId(null);
-  }, []);
-
-  const handleResetCredits = useCallback(() => {
-    if (!studentId) return;
-    resetCredits(studentId);
-    setCredits(getCredits(studentId));
-  }, [studentId]);
 
   // ── Session ──────────────────────────────────────────────────────────────────
   const [selectedWeek, setSelectedWeek] = useState(DEFAULT_WEEK);
@@ -234,24 +232,6 @@ export default function Home() {
       const q = question.trim();
       if (!q || isStreaming) return;
 
-      // Starter-credit gate (pilot test): checked before the readiness guards
-      // below so a student out of credits is told immediately, instead of
-      // being sent to load a large browser AI model first. Bringing your own
-      // cloud API key is the BYO path and never spends credits, so it stays
-      // available even at 0.
-      const usesOwnKey = mode === "cloud" && !!cloudApiKey.trim();
-      if (studentId && credits <= 0 && !usesOwnKey) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content:
-              "🪙 You've used all your free starter credits for this pilot test.\n\nEnter your own API key in **Cloud API** mode to keep going — Groq's free tier works well and responds in seconds.",
-          },
-        ]);
-        return;
-      }
-
       // Guards
       if (mode === "webllm" && browserEngine === "webllm" && loadStatus !== "ready") {
         alert("Please load a browser AI model first using the sidebar.");
@@ -263,6 +243,10 @@ export default function Home() {
       }
       if (mode === "cloud" && !cloudApiKey.trim()) {
         alert("Please enter your API key in the sidebar.");
+        return;
+      }
+      if (mode === "freetrial" && !freeTrialSession) {
+        alert("Please enter your access code in the sidebar first.");
         return;
       }
 
@@ -314,9 +298,6 @@ export default function Home() {
             setMessages((prev) => [...prev, { role: "assistant", content: fullResponse }]);
             setStreamText("");
             setIsStreaming(false);
-            if (studentId && !usesOwnKey) {
-              setCredits(spendCredit(studentId));
-            }
           }
         };
 
@@ -459,7 +440,7 @@ export default function Home() {
           } finally {
             document.removeEventListener("visibilitychange", trackVisibility);
           }
-        } else {
+        } else if (mode === "cloud") {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamCloudChat, validateApiKey } = await import("@/lib/cloudapi");
           if (!validateApiKey(cloudProvider, cloudApiKey)) {
@@ -468,6 +449,19 @@ export default function Home() {
             );
           }
           await streamCloudChat(cloudProvider, cloudApiKey, cloudModelName, buildMessages(chunks, q), onToken, controller.signal);
+        } else {
+          // Free Trial — server-funded, credit-metered. The route handler
+          // owns the API key and the grounding prompt; we only send the
+          // retrieved chunks and the raw question.
+          const remainingMicroUsd = await streamFreeTrial(
+            selectedWeek,
+            q,
+            chunks,
+            (token) => onToken(token, false),
+            controller.signal
+          );
+          onToken("", true);
+          setFreeTrialSession((prev) => (prev ? { ...prev, remainingMicroUsd } : prev));
         }
       } catch (err) {
         // User pressed Stop (fetch/stream aborted) — finalized in handleStop.
@@ -478,7 +472,7 @@ export default function Home() {
         setIsStreaming(false);
       }
     },
-    [isStreaming, mode, browserEngine, loadStatus, chromeAIStatus, cloudApiKey, cloudProvider, cloudModelName, selectedWeek, studentId, credits]
+    [isStreaming, mode, browserEngine, loadStatus, chromeAIStatus, cloudApiKey, cloudProvider, cloudModelName, selectedWeek, freeTrialSession]
   );
 
   const handleSampleQuestion = useCallback(
@@ -518,9 +512,6 @@ export default function Home() {
 
   const currentSession = SESSIONS.find((s) => s.week === selectedWeek) ?? SESSIONS[0];
 
-  if (!gateChecked) return null;
-  if (!studentId) return <StudentGate onLogin={handleStudentLogin} />;
-
   return (
     // h-dvh = dynamic viewport height — correctly handles mobile browser chrome (address bar)
     <div className="flex h-dvh overflow-hidden bg-gray-50">
@@ -558,6 +549,13 @@ export default function Home() {
           onRememberApiKeyChange={handleRememberApiKeyChange}
           cloudModelName={cloudModelName}
           onCloudModelNameChange={setCloudModelName}
+          freeTrialSession={freeTrialSession}
+          freeTrialCode={freeTrialCode}
+          onFreeTrialCodeChange={setFreeTrialCode}
+          onFreeTrialLogin={handleFreeTrialLogin}
+          onFreeTrialLogout={handleFreeTrialLogout}
+          freeTrialBusy={freeTrialBusy}
+          freeTrialError={freeTrialError}
           onClearChat={() => setMessages([])}
           onClose={() => setSidebarOpen(false)}
         />
@@ -581,17 +579,13 @@ export default function Home() {
             <p className="text-xs text-gray-500">Course · {COURSE_NAME}</p>
             <h2 className="text-sm font-semibold text-gray-800 mt-0.5 truncate">{currentSession.title}</h2>
           </div>
-          <div className="ml-auto flex items-center gap-3 shrink-0 text-xs">
-            <span className={`font-medium ${credits > 0 ? "text-gray-600" : "text-red-500"}`}>
-              🪙 {credits} credit{credits === 1 ? "" : "s"} left
-            </span>
-            <button onClick={handleStudentLogout} className="text-blue-600 hover:underline">
-              Switch student
-            </button>
-            <button onClick={handleResetCredits} className="text-gray-400 hover:underline">
-              reset (test)
-            </button>
-          </div>
+          {mode === "freetrial" && freeTrialSession && (
+            <div className="ml-auto flex items-center gap-3 shrink-0 text-xs">
+              <span className="font-medium text-gray-600">
+                🪙 {formatMicroUsd(freeTrialSession.remainingMicroUsd)} left
+              </span>
+            </div>
+          )}
         </div>
 
         <SampleQuestions session={currentSession} onSelect={handleSampleQuestion} disabled={isStreaming} />
