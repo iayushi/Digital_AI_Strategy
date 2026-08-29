@@ -8,7 +8,8 @@ Instructions:
 5. Do not include in-text citations without also providing a full reference list.
 6. Be concise and direct. Answer in at most a few short paragraphs.
 7. Never repeat the same sentence or phrase, and do not restart your answer. When you have answered the question, stop.
-8. If the context is thin or the question is vague, give a brief answer and, if helpful, ask one clarifying question — do not pad the response with repetition.`;
+8. If the context is thin or the question is vague, give a brief answer and, if helpful, ask one clarifying question — do not pad the response with repetition.
+9. Students often frame questions using well-known pop-culture analogies (movies, superheroes, games) purely as a memorable teaching device. Using common, widely-known references this way is a communication style, not "outside knowledge" — engage with the analogy and make the mapping the student is asking for. Every substantive claim about the course content itself must still come only from the provided context; only the analogy's framing may draw on general knowledge.`;
 
 /**
  * Assemble the grounding prompt from retrieved context chunks and the user's question.
