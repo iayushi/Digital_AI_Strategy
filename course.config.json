@@ -58,7 +58,9 @@
         { "label": "🔗 Network Effects (Simply)", "question": "How do network effects work in platform-based business models, and why do they lead to exponential growth and defensibility?" },
         { "label": "🦇 Batman's Risk Management", "question": "The decision to let third-party developers on a platform is like a superhero trusting a new ally. What are the key risks when inviting third-party sellers or developers, and what governance measures can mitigate them?" },
         { "label": "🧬 X-Men: Connecting vs Reaching Out", "question": "The 'Connecting customers' strategy is like Professor X linking minds, while 'Reaching out to customers' is like a global outreach mission. How do these strategies differ, and what are the benefits and challenges of each?" },
-        { "label": "⚙️ Cold Call: LEGO's IT Backbone", "question": "You are cold-called: 'What IT capabilities are critical for enabling transactions in a platform model like LEGO's Bricklink or a marketplace model? Cite 3 specific examples.'" }
+        { "label": "⚙️ Cold Call: LEGO's IT Backbone", "question": "You are cold-called: 'What IT capabilities are critical for enabling transactions in a platform model like LEGO's Bricklink or a marketplace model? Cite 3 specific examples.'" },
+        { "label": "⭐ Star Model™ (Simply)", "question": "What are the five points of Jay R. Galbraith's Star Model™ for organisational design, and which two elements typically present the greatest challenge during a digital transformation?" },
+        { "label": "🚀 Challenger & Columbia Lessons", "question": "Using the Star Model™, what went wrong in both the Challenger and Columbia space shuttle disasters, and why did the same type of misalignment happen twice?" }
       ]
     },
     {
@@ -66,11 +68,34 @@
       "title": "Week 7 · Digital and AI Strategy Implementation",
       "sampleQuestions": [
         { "label": "🏗️ 10-Block Framework", "question": "What is the primary purpose of the 10-building-block Digital Strategy Implementation Framework, and which three blocks are most critical?" },
-        { "label": "⭐ Star Model™ (Simply)", "question": "What are the five points of Jay R. Galbraith's Star Model™ for organisational design, and which two elements typically present the greatest challenge during a digital transformation?" },
         { "label": "📡 Vodafone's Automation Strategy", "question": "Vodafone's primary goal is to 'Automate and improve customer care.' What are the three most critical data and IT infrastructure capabilities required to achieve high-level automation in customer service, and how do the 10 building blocks of the framework apply?" },
         { "label": "🏭 ABB vs CNH Goals", "question": "ABB's goal is to create 'continuous value' through software-enabled services, while CNH Industrial focuses on 'predictive maintenance and intelligent logistics.' How do these different goals influence scope, investment, and timeline for their digital transformations?" },
-        { "label": "🛑 Cold Call: Star Model™ Alignment", "question": "You are cold-called: 'If a company introduces a new digital product (Strategy) but its IT department (Structure) is siloed, which other two elements of the Star Model™ must be urgently realigned to avoid failure? Justify with a real-world example.'" },
+        { "label": "🛑 Cold Call: Star Model™ Alignment", "question": "You are cold-called: 'If a company introduces a new digital product (Strategy) but its IT department (Structure) is siloed, which other two elements of the Star Model™ (covered in Week 5) must be urgently realigned to avoid failure? Justify with a real-world example.'" },
         { "label": "📈 Digital Maturity Metrics", "question": "The 10-Step Framework emphasises metrics. What KPI measures operational effectiveness in a digital transformation, and how does it differ from a KPI that measures customer value creation?" }
+      ]
+    },
+    {
+      "week": 8,
+      "title": "Week 8 · AI & the Future of Work",
+      "sampleQuestions": [
+        { "label": "🦾 Centaur vs Cyborg", "question": "Compare the 'centaur' and 'cyborg' models of human-AI collaboration to a superhero and their sidekick. Which model better describes Iron Man and JARVIS, and why?" },
+        { "label": "🧗 The Jagged Frontier", "question": "Explain the 'jagged frontier' of AI capability using a video game analogy — why might an AI ace a 'hard' level but fail a 'tutorial' level?" },
+        { "label": "👶 Explain to a 13-year-old", "question": "Explain the learnings from this session to a thirteen year old." },
+        { "label": "🏛️ Cold Call: Public Sector Adoption", "question": "You are cold-called: 'Why might a government agency adopt AI more slowly than a startup, even with an unlimited budget? Name two specific barriers.'" },
+        { "label": "🔧 Reskilling the Pipeline", "question": "If AI absorbs the routine tasks junior employees used to learn from, how should a company redesign its talent pipeline so new hires still build real expertise?" },
+        { "label": "⭐ Star Model Connection", "question": "How does the Star Model (from Week 5) help explain why introducing AI tools without changing structure or rewards often fails to stick?" }
+      ]
+    },
+    {
+      "week": 9,
+      "title": "Week 9 · AI Ethics & Responsible Implementation",
+      "sampleQuestions": [
+        { "label": "⚖️ Superhero Ethics Board", "question": "If your company's AI ethics review board was a team of superheroes, what would each 'member' need to check for before a new AI tool launches?" },
+        { "label": "🕵️ Data Feminism Detective", "question": "Using a data feminism lens, what questions should you ask about a dataset before trusting an AI model trained on it?" },
+        { "label": "🇪🇺 Cold Call: EU AI Act Tiers", "question": "You are cold-called: 'A company wants to launch an AI tool that screens job applicants. Which risk tier of the EU AI Act applies, and what obligations follow?'" },
+        { "label": "☘️ Ireland's AI Strategy", "question": "What is the central tension Ireland's 'AI – Here for Good' strategy tries to balance, and why might that tension exist in most national AI strategies?" },
+        { "label": "🐢 Speed vs Scrutiny", "question": "A rival company ships a new AI feature in weeks; yours takes months due to ethical review. When is the slower path actually the competitive advantage?" },
+        { "label": "👶 Explain to a 13-year-old", "question": "Explain the learnings from this session to a thirteen year old." }
       ]
     }
   ]
