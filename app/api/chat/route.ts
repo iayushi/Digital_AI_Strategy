@@ -14,7 +14,12 @@ import { buildPrompt } from "@/lib/prompt";
 import { kvLogEvent } from "@/lib/server/kv";
 
 const MAX_QUESTION_CHARS = 2000;
-const MAX_CHUNKS_CHARS = 12000;
+// Real course content's top-5-chunk retrievals run 15,500-17,000 characters
+// across every session (checked against public/data/week-*.bin) — this cap
+// exists only as a broad anti-abuse ceiling (a student can't stuff megabytes
+// of junk text), not to restrict legitimate retrieval, so it sits well above
+// the observed worst case rather than tight against it.
+const MAX_CHUNKS_CHARS = 25_000;
 
 const client = new Anthropic();
 
