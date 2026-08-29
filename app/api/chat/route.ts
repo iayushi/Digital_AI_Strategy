@@ -11,7 +11,7 @@ import {
   estimateInputTokens,
 } from "@/lib/server/pricing";
 import { buildPrompt } from "@/lib/prompt";
-import { kvLogEvent } from "@/lib/server/kv";
+import { logEvent } from "@/lib/server/analytics";
 
 const MAX_QUESTION_CHARS = 2000;
 // Real course content's top-5-chunk retrievals run 15,500-17,000 characters
@@ -97,7 +97,8 @@ export async function POST(request: NextRequest) {
         inputTokenEstimate * MICRO_USD_PER_INPUT_TOKEN +
         Math.ceil(outputCharsSoFar / 4) * MICRO_USD_PER_OUTPUT_TOKEN;
     await settle(studentId, reservationMicroUsd, actualMicroUsd);
-    await kvLogEvent("ft:metrics", {
+    await logEvent({
+      type: "chat",
       studentId,
       week,
       inputTokens: usage?.input_tokens ?? inputTokenEstimate,
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
       latencyMs: Date.now() - startedAt,
       complete: usage !== null,
       at: new Date().toISOString(),
-    }).catch(() => {});
+    });
   };
 
   const encoder = new TextEncoder();

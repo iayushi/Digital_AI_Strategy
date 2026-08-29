@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findStudentByCode } from "@/lib/server/roster";
 import { createSessionToken, SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/server/session";
 import { ensureInitialized, getRemainingMicroUsd } from "@/lib/server/ledger";
+import { logEvent } from "@/lib/server/analytics";
 
 export async function POST(request: NextRequest) {
   let body: { code?: unknown };
@@ -26,7 +27,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Free Trial isn't set up yet. Try again later or use another mode." }, { status: 503 });
   }
 
-  const res = NextResponse.json({ studentId: student.id, name: student.name, remainingMicroUsd });
+  await logEvent({ type: "login", studentId: student.id, at: new Date().toISOString() });
+
+  const res = NextResponse.json({
+    studentId: student.id,
+    name: student.name,
+    remainingMicroUsd,
+    mcpUrl: `${request.nextUrl.origin}/api/mcp/${encodeURIComponent(student.code)}`,
+  });
   res.cookies.set(SESSION_COOKIE, createSessionToken(student.id), SESSION_COOKIE_OPTIONS);
   return res;
 }

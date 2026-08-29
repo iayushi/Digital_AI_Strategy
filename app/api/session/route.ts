@@ -17,7 +17,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const remainingMicroUsd = await getRemainingMicroUsd(studentId);
-    return NextResponse.json({ loggedIn: true, studentId, name: student.name, remainingMicroUsd });
+    return NextResponse.json({
+      loggedIn: true,
+      studentId,
+      name: student.name,
+      remainingMicroUsd,
+      mcpUrl: `${request.nextUrl.origin}/api/mcp/${encodeURIComponent(student.code)}`,
+    });
   } catch (err) {
     console.error("Free Trial session check failed — credit store unavailable:", err);
     return NextResponse.json({ loggedIn: false }, { status: 503 });

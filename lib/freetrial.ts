@@ -6,6 +6,7 @@ export interface FreeTrialSession {
   studentId: string;
   name: string;
   remainingMicroUsd: number;
+  mcpUrl: string;
 }
 
 export function formatMicroUsd(microUsd: number): string {
@@ -56,7 +57,7 @@ export async function streamFreeTrial(
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (body.error === "insufficient_credits") {
       throw new Error(
-        "🪙 You've used all your free starter credits. Switch to Cloud API mode with your own key, or use Browser AI (free)."
+        "🪙 You've used all your free starter credits. Switch to Cloud API mode with your own key, use Browser AI (free), or connect your free Claude.ai account to this course's content — see the connector link in the sidebar."
       );
     }
     if (body.error === "service_paused") {

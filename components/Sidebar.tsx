@@ -311,6 +311,16 @@ export default function Sidebar({
                 <p className="font-medium">✓ Logged in as {freeTrialSession.name}</p>
                 <p className="mt-1">{formatMicroUsd(freeTrialSession.remainingMicroUsd)} of starter credit left</p>
               </div>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800 leading-snug">
+                <p className="font-medium">Out of credit? Use your own free Claude.ai account</p>
+                <p className="mt-1">Claude.ai (free plan) → Settings → Connectors → Add custom connector → paste this URL. Then just chat with Claude normally — it will search this course's content when relevant.</p>
+                <input
+                  readOnly
+                  value={freeTrialSession.mcpUrl}
+                  onFocus={(e) => e.target.select()}
+                  className="mt-2 w-full text-xs rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-mono text-blue-900"
+                />
+              </div>
               <button
                 onClick={onFreeTrialLogout}
                 className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"

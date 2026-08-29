@@ -67,3 +67,16 @@ export async function kvLogEvent(key: string, payload: unknown, maxEntries = 500
   await command("lpush", key, JSON.stringify(payload));
   await command("ltrim", key, 0, maxEntries - 1);
 }
+
+// Reads back a JSON event log written by kvLogEvent, newest-first.
+export async function kvLRange<T>(key: string, start: number, stop: number): Promise<T[]> {
+  const result = await command("lrange", key, start, stop);
+  if (!Array.isArray(result)) return [];
+  return result.map((raw) => {
+    try {
+      return JSON.parse(String(raw)) as T;
+    } catch {
+      return null;
+    }
+  }).filter((v): v is T => v !== null);
+}
