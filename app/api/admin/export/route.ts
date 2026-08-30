@@ -13,8 +13,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin export is not configured (ADMIN_SECRET unset)." }, { status: 503 });
   }
 
+  // Accept the secret either as a Bearer header (curl/scripts) or a ?secret=
+  // query param, so the export link also works pasted directly into a browser
+  // — a plain URL can't carry a custom header.
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${adminSecret}`) {
+  const querySecret = request.nextUrl.searchParams.get("secret");
+  const authorized = auth === `Bearer ${adminSecret}` || querySecret === adminSecret;
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
