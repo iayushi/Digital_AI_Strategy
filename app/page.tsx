@@ -1,39 +1,16 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import Sidebar, { Mode, BrowserEngine } from "@/components/Sidebar";
+import Sidebar, { Mode } from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
 import { SESSIONS, DEFAULT_WEEK, COURSE_NAME } from "@/lib/sessions";
-import { LoadStatus, LoadProgress, DEFAULT_MODEL_ID } from "@/lib/webllm";
 import { CloudProvider } from "@/lib/cloudapi";
-import { ChromeAIStatus } from "@/lib/chromeai";
 import { FreeTrialSession, formatMicroUsd, getFreeTrialSession, loginFreeTrial, logoutFreeTrial, streamFreeTrial } from "@/lib/freetrial";
 
 // sessionStorage key for the opt-in "remember on this device" API key.
 // sessionStorage (not localStorage) so it is cleared when the tab closes.
 const API_KEY_STORAGE = "dais.cloudApiKey";
-
-// Only treat genuine hardware/driver failures as GPU errors.
-// State errors ("not loaded", "engine not ready") must NOT call resetEngine()
-// because the engine is still valid — the user just needs to wait or retry.
-function isGPUError(msg: string): boolean {
-  const m = msg.toLowerCase();
-  return (
-    m.includes("mapasync") ||
-    m.includes("device lost") ||
-    m.includes("webgpu") ||
-    m.includes("shader") ||
-    // GPU OOM / general hardware failure — only when "gpu" appears with an error/failure word
-    (m.includes("gpu") && (m.includes("error") || m.includes("fail") || m.includes("memory") || m.includes("lost")))
-  );
-}
-
-// Interrupt the WebLLM engine if one is active.
-// Dynamic import keeps the heavy bundle out of the initial load.
-function interruptActiveEngine(): void {
-  import("@/lib/webllm").then(({ interruptWebLLM }) => interruptWebLLM()).catch(() => {});
-}
 
 export default function Home() {
   // ── Free Trial (server-funded credits) ──────────────────────────────────────
@@ -79,15 +56,7 @@ export default function Home() {
   }, []);
 
   // ── Mode ─────────────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<Mode>("webllm");
-  const [browserEngine, setBrowserEngine] = useState<BrowserEngine>("webllm");
-  const [chromeAIStatus, setChromeAIStatus] = useState<ChromeAIStatus>("checking");
-
-  useEffect(() => {
-    import("@/lib/chromeai").then(({ getChromeAIStatus }) =>
-      getChromeAIStatus().then(setChromeAIStatus)
-    );
-  }, []);
+  const [mode, setMode] = useState<Mode>("freetrial");
 
   // Hide first-query latency: prefetch the default week's (small) binary
   // immediately, and warm the larger embedding model during idle time so the
@@ -111,70 +80,6 @@ export default function Home() {
       if (ric && cic) cic(id);
       else window.clearTimeout(id);
     };
-  }, []);
-
-  // ── Web-LLM ──────────────────────────────────────────────────────────────────
-  const [webllmModelId, setWebllmModelId] = useState(DEFAULT_MODEL_ID);
-  const [loadStatus, setLoadStatus] = useState<LoadStatus>("idle");
-  const [loadProgress, setLoadProgress] = useState<LoadProgress>({ text: "", progress: 0 });
-
-  const handleLoadModel = useCallback(async () => {
-    setLoadStatus("loading");
-    setLoadProgress({ text: "Initialising…", progress: 0 });
-    try {
-      const { loadModel } = await import("@/lib/webllm");
-
-      // Load watchdog: a reload can hang indefinitely if the WebGPU device was
-      // wedged by a background suspension — the user just sees a frozen 0%
-      // spinner ("nothing happens"). Treat *no progress* for LOAD_STALL_MS as a
-      // failure. We track stall (not total time) so a genuinely slow first-time
-      // download (~hundreds of MB) is never killed mid-progress.
-      const LOAD_STALL_MS = 60_000;
-      let lastProgressAt = Date.now();
-      await new Promise<void>((resolve, reject) => {
-        const watchdog = setInterval(() => {
-          if (Date.now() - lastProgressAt > LOAD_STALL_MS) {
-            clearInterval(watchdog);
-            reject(new Error("__load_stall__"));
-          }
-        }, 5000);
-        loadModel(webllmModelId, (p) => {
-          lastProgressAt = Date.now();
-          setLoadProgress(p);
-        })
-          .then(() => {
-            clearInterval(watchdog);
-            resolve();
-          })
-          .catch((e) => {
-            clearInterval(watchdog);
-            reject(e);
-          });
-      });
-      setLoadStatus("ready");
-    } catch (err) {
-      // Discard any half-initialised/wedged engine so the next click starts
-      // from a fresh MLCEngine instead of silently failing again.
-      const { interruptAndResetEngine } = await import("@/lib/webllm");
-      interruptAndResetEngine();
-      setLoadStatus("error");
-      const stalled = err instanceof Error && err.message === "__load_stall__";
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: stalled
-            ? "⚠️ The model didn't finish loading — the GPU may have been paused (e.g. the tab was in the background) or run low on memory.\n\nPress **Load Model** to try again, or switch to **Cloud API** mode (Groq is free and responds in seconds)."
-            : "⚠️ The browser AI model failed to load on this device.\n\nPress **Load Model** to try again, or switch to **Cloud API** mode (Groq is free and responds in seconds).",
-        },
-      ]);
-      console.error("Web-LLM load error:", err);
-    }
-  }, [webllmModelId]);
-
-  const handleWebllmModelChange = useCallback((id: string) => {
-    setWebllmModelId(id);
-    setLoadStatus("idle");
   }, []);
 
   // ── Cloud API ─────────────────────────────────────────────────────────────────
@@ -217,7 +122,6 @@ export default function Home() {
   const [streamText, setStreamText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const abortRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const partialRef = useRef("");
@@ -233,14 +137,6 @@ export default function Home() {
       if (!q || isStreaming) return;
 
       // Guards
-      if (mode === "webllm" && browserEngine === "webllm" && loadStatus !== "ready") {
-        alert("Please load a browser AI model first using the sidebar.");
-        return;
-      }
-      if (mode === "webllm" && browserEngine === "chrome" && chromeAIStatus !== "ready") {
-        alert("Chrome AI is not ready. Make sure you're on Chrome 127+ with AI features enabled.");
-        return;
-      }
       if (mode === "cloud" && !cloudApiKey.trim()) {
         alert("Please enter your API key in the sidebar.");
         return;
@@ -250,7 +146,6 @@ export default function Home() {
         return;
       }
 
-      setTabSwitchWarning(false);
       setMessages((prev) => [...prev, { role: "user", content: q }]);
       setStreamText("");
       setIsStreaming(true);
@@ -301,146 +196,7 @@ export default function Home() {
           }
         };
 
-        if (mode === "webllm" && browserEngine === "chrome") {
-          // Chrome AI takes a plain string prompt
-          const { buildPrompt } = await import("@/lib/prompt");
-          const { streamChromeAI } = await import("@/lib/chromeai");
-          await streamChromeAI(buildPrompt(chunks, q), onToken, controller.signal);
-        } else if (mode === "webllm") {
-          const { buildMessages } = await import("@/lib/prompt");
-          const { streamWebLLM } = await import("@/lib/webllm");
-
-          // Track tab visibility during streaming — WebGPU is suspended when
-          // the tab is hidden, causing the inference to fail.
-          let tabHiddenDuringStream = false;
-          const trackVisibility = () => { if (document.hidden) tabHiddenDuringStream = true; };
-          document.addEventListener("visibilitychange", trackVisibility);
-
-          try {
-            // Watchdog: guards against a truly silent stall (tab backgrounded
-            // with WebGPU suspended and no error thrown). 90 s gives ample time
-            // for first-token generation even on slow/integrated GPUs.
-            // IMPORTANT: when the watchdog fires it also interrupts the engine so
-            // the abandoned streamWebLLM promise doesn't keep running as a zombie
-            // (a zombie that then conflicts with the next reload/generation).
-            const STALL_MS = 90_000;
-            let lastActivity = Date.now();
-            const webllmOnToken = (token: string, done: boolean) => {
-              lastActivity = Date.now();
-              onToken(token, done);
-            };
-            await new Promise<void>((resolve, reject) => {
-              const watchdog = setInterval(() => {
-                if (Date.now() - lastActivity > STALL_MS) {
-                  clearInterval(watchdog);
-                  // The stall catch-handler calls interruptAndResetEngine() which
-                  // interrupts the engine while it is still non-null, then nulls it.
-                  // Do NOT call interruptActiveEngine() here — by the time the
-                  // dynamic import resolves, the handler may have already nulled
-                  // _engine, making the interrupt a no-op.
-                  reject(new Error("__stall__"));
-                }
-              }, 5000);
-              streamWebLLM(buildMessages(chunks, q), webllmOnToken)
-                .then(() => {
-                  clearInterval(watchdog);
-                  resolve();
-                })
-                .catch((e) => {
-                  clearInterval(watchdog);
-                  reject(e);
-                });
-            });
-          } catch (webllmErr) {
-            document.removeEventListener("visibilitychange", trackVisibility);
-
-            // User pressed Stop — partial was already finalized in handleStop.
-            if (abortRef.current) return;
-
-            if (tabHiddenDuringStream) {
-              // Tab was switched — restore question to input silently.
-              // Interrupt the abandoned generation so its engine lock is freed;
-              // otherwise the next Send can hit "Model not loaded before trying
-              // to complete ChatCompletionRequest" on a still-busy engine.
-              abortRef.current = true;
-              interruptActiveEngine();
-              setMessages((prev) => prev.slice(0, -1));
-              setInputValue(q);
-              setStreamText("");
-              setIsStreaming(false);
-              setTabSwitchWarning(true);
-              return;
-            }
-
-            const errMsg = webllmErr instanceof Error ? webllmErr.message : String(webllmErr);
-
-            const { interruptAndResetEngine } = await import("@/lib/webllm");
-
-            // Watchdog timeout — 90 s with no tokens.
-            // interruptAndResetEngine() interrupts the zombie generation (while
-            // _engine is still non-null) then nulls it, so the next Load Model
-            // click creates a fresh MLCEngine without conflict.
-            if (errMsg === "__stall__") {
-              interruptAndResetEngine();
-              setLoadStatus("idle");
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content:
-                    "⚠️ No response in 90 seconds — the engine has been reset.\n\nPress **Load Model** to reload and try again, or switch to **Cloud API** mode (Groq is free and responds in seconds).",
-                },
-              ]);
-              setStreamText("");
-              setIsStreaming(false);
-              return;
-            }
-
-            // web-llm engine state error — zombie/reload conflict or invalidated
-            // WebGPU context.
-            if (
-              errMsg.toLowerCase().includes("mlcengine") ||
-              errMsg.toLowerCase().includes("createmlcengine") ||
-              errMsg.toLowerCase().includes("not loaded before") ||
-              errMsg.toLowerCase().includes("initialize your engine")
-            ) {
-              interruptAndResetEngine();
-              setLoadStatus("idle");
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content:
-                    "⚠️ The browser AI engine lost its state. Press **Load Model** in the sidebar to reload it, then try again.",
-                },
-              ]);
-              setStreamText("");
-              setIsStreaming(false);
-              return;
-            }
-
-            if (isGPUError(errMsg)) {
-              // GPU/WebGPU hardware failure — common on mobile and low-VRAM devices.
-              interruptAndResetEngine();
-              setLoadStatus("idle");
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content:
-                    "⚠️ Your device's GPU couldn't run the AI model — this is common on mobile phones and tablets.\n\nSwitch to **Cloud API** mode instead. Groq is free (no credit card needed) and very fast.",
-                },
-              ]);
-              setStreamText("");
-              setIsStreaming(false);
-              return;
-            }
-
-            throw webllmErr; // unrecognised error — let outer catch show it
-          } finally {
-            document.removeEventListener("visibilitychange", trackVisibility);
-          }
-        } else if (mode === "cloud") {
+        if (mode === "cloud") {
           const { buildMessages } = await import("@/lib/prompt");
           const { streamCloudChat, validateApiKey } = await import("@/lib/cloudapi");
           if (!validateApiKey(cloudProvider, cloudApiKey)) {
@@ -472,7 +228,7 @@ export default function Home() {
         setIsStreaming(false);
       }
     },
-    [isStreaming, mode, browserEngine, loadStatus, chromeAIStatus, cloudApiKey, cloudProvider, cloudModelName, selectedWeek, freeTrialSession]
+    [isStreaming, mode, cloudApiKey, cloudProvider, cloudModelName, selectedWeek, freeTrialSession]
   );
 
   const handleSampleQuestion = useCallback(
@@ -486,7 +242,6 @@ export default function Home() {
     generationIdRef.current += 1;
     abortRef.current = true;
     abortControllerRef.current?.abort();
-    interruptActiveEngine();
 
     // Keep whatever was generated so far as the assistant's (partial) answer.
     const partial = partialRef.current;
@@ -533,14 +288,6 @@ export default function Home() {
           onWeekChange={handleWeekChange}
           mode={mode}
           onModeChange={setMode}
-          browserEngine={browserEngine}
-          onBrowserEngineChange={setBrowserEngine}
-          chromeAIStatus={chromeAIStatus}
-          webllmModelId={webllmModelId}
-          onWebllmModelChange={handleWebllmModelChange}
-          loadStatus={loadStatus}
-          loadProgress={loadProgress}
-          onLoadModel={handleLoadModel}
           cloudProvider={cloudProvider}
           onCloudProviderChange={setCloudProvider}
           cloudApiKey={cloudApiKey}
@@ -591,23 +338,6 @@ export default function Home() {
         <SampleQuestions session={currentSession} onSelect={handleSampleQuestion} disabled={isStreaming} />
 
         <ChatWindow messages={messages} streamText={streamText} isStreaming={isStreaming} />
-
-        {/* Tab-switch warning banner — only shown after a Web-LLM tab-switch interruption */}
-        {tabSwitchWarning && (
-          <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 flex items-center justify-between shrink-0">
-            <p className="text-xs text-amber-800 leading-snug">
-              ⚠️ <strong>Generation stopped</strong> — the browser paused AI when you left this tab.
-              Your question is ready below. Press <strong>Send</strong> to try again.
-            </p>
-            <button
-              onClick={() => setTabSwitchWarning(false)}
-              className="ml-3 shrink-0 text-amber-500 hover:text-amber-700 text-sm leading-none"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
           <div className="flex gap-2 items-end">
