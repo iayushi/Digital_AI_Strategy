@@ -6,7 +6,7 @@ import ChatWindow, { Message } from "@/components/ChatWindow";
 import SampleQuestions from "@/components/SampleQuestions";
 import { SESSIONS, DEFAULT_WEEK, COURSE_NAME } from "@/lib/sessions";
 import { CloudProvider } from "@/lib/cloudapi";
-import { FreeTrialSession, formatMicroUsd, getFreeTrialSession, loginFreeTrial, logoutFreeTrial, streamFreeTrial } from "@/lib/freetrial";
+import { FreeTrialSession, formatPoints, getFreeTrialSession, loginFreeTrial, logoutFreeTrial, streamFreeTrial } from "@/lib/freetrial";
 
 // sessionStorage key for the opt-in "remember on this device" API key.
 // sessionStorage (not localStorage) so it is cleared when the tab closes.
@@ -329,7 +329,7 @@ export default function Home() {
           {mode === "freetrial" && freeTrialSession && (
             <div className="ml-auto flex items-center gap-3 shrink-0 text-xs">
               <span className="font-medium text-gray-600">
-                🪙 {formatMicroUsd(freeTrialSession.remainingMicroUsd)} left
+                ⭐ {formatPoints(freeTrialSession.remainingMicroUsd)} left
               </span>
             </div>
           )}

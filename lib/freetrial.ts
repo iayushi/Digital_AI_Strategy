@@ -13,6 +13,17 @@ export function formatMicroUsd(microUsd: number): string {
   return `$${Math.max(0, microUsd / 1_000_000).toFixed(4)}`;
 }
 
+// Student-facing display unit: 1 point = 1000 micro-USD ($0.001), an integer
+// currency so students see whole numbers instead of fractions of a cent.
+// Purely presentational -- the ledger and API still account in micro-USD;
+// this never changes what's actually reserved or charged. Keeps the $0.50
+// default starting budget a clean 500 points.
+const MICRO_USD_PER_POINT = 1000;
+
+export function formatPoints(microUsd: number): string {
+  return `${Math.floor(Math.max(0, microUsd) / MICRO_USD_PER_POINT)} pts`;
+}
+
 export async function loginFreeTrial(code: string): Promise<FreeTrialSession> {
   const res = await fetch("/api/login", {
     method: "POST",
@@ -57,7 +68,7 @@ export async function streamFreeTrial(
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     if (body.error === "insufficient_credits") {
       throw new Error(
-        "🪙 You've used all your free starter credits. Switch to Cloud API mode with your own key, use Browser AI (free), or connect your free Claude.ai account to this course's content — see the connector link in the sidebar."
+        "⭐ You've used all your free starter points. Switch to Cloud API mode with your own key, use Browser AI (free), or connect your free Claude.ai account to this course's content — see the connector link in the sidebar."
       );
     }
     if (body.error === "service_paused") {

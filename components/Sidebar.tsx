@@ -2,7 +2,7 @@
 
 import { SESSIONS, COURSE_NAME, COURSE_SUBTITLE } from "@/lib/sessions";
 import { CLOUD_PROVIDERS, CloudProvider } from "@/lib/cloudapi";
-import { FreeTrialSession, formatMicroUsd } from "@/lib/freetrial";
+import { FreeTrialSession, formatPoints } from "@/lib/freetrial";
 
 export type Mode = "cloud" | "freetrial";
 
@@ -89,7 +89,7 @@ export default function Sidebar({
             onClick={() => onModeChange("freetrial")}
             className={`flex-1 py-2 text-xs font-medium transition-colors ${mode === "freetrial" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
           >
-            🪙 Free Trial
+            ⭐ Free Trial
           </button>
           <button
             onClick={() => onModeChange("cloud")}
@@ -101,7 +101,7 @@ export default function Sidebar({
         <p className="text-xs text-gray-400 mt-1.5">
           {mode === "cloud"
             ? "Your API key is used client-side only."
-            : "A small starter credit funded by the course — no key needed until it runs out."}
+            : "A small starter points balance funded by the course (~5-12 points per question) — no key needed until it runs out."}
         </p>
       </div>
 
@@ -170,10 +170,10 @@ export default function Sidebar({
             <>
               <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-xs text-green-800">
                 <p className="font-medium">✓ Logged in as {freeTrialSession.name}</p>
-                <p className="mt-1">{formatMicroUsd(freeTrialSession.remainingMicroUsd)} of starter credit left</p>
+                <p className="mt-1">{formatPoints(freeTrialSession.remainingMicroUsd)} of starter points left</p>
               </div>
               <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800 leading-snug">
-                <p className="font-medium">Out of credit? Use your own free Claude.ai account</p>
+                <p className="font-medium">Out of points? Use your own free Claude.ai account</p>
                 <p className="mt-1">Claude.ai (free plan) → Settings → Connectors → Add custom connector → paste this URL. Then just chat with Claude normally — it will search this course's content when relevant.</p>
                 <input
                   readOnly
