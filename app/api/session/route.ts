@@ -3,6 +3,9 @@ import { verifySessionToken, SESSION_COOKIE } from "@/lib/server/session";
 import { findStudentById } from "@/lib/server/roster";
 import { getRemainingMicroUsd } from "@/lib/server/ledger";
 
+// EU data residency: keep in sync with lib/server chat route's region.
+export const preferredRegion = "fra1";
+
 export async function GET(request: NextRequest) {
   const studentId = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   if (!studentId) {

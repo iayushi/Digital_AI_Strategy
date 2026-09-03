@@ -4,6 +4,9 @@ import { createSessionToken, SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/li
 import { ensureInitialized, getRemainingMicroUsd } from "@/lib/server/ledger";
 import { logEvent } from "@/lib/server/analytics";
 
+// EU data residency: keep in sync with lib/server chat route's region.
+export const preferredRegion = "fra1";
+
 export async function POST(request: NextRequest) {
   let body: { code?: unknown };
   try {

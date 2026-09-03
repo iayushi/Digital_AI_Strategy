@@ -14,6 +14,9 @@ import { logEvent } from "@/lib/server/analytics";
 // Every response is a bounded, per-query excerpt (same topK shape as the
 // chat UI's own grounding) — never a bulk document dump of the source docs.
 
+// EU data residency: keep in sync with lib/server chat route's region.
+export const preferredRegion = "fra1";
+
 const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "dais-course-content", version: "1.0.0" };
 

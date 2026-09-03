@@ -13,6 +13,11 @@ import {
 import { buildPrompt } from "@/lib/prompt";
 import { logEvent } from "@/lib/server/analytics";
 
+// EU data residency: pin this route to Frankfurt so the question/answer
+// exchange with Anthropic and the KV read/write happen from an EU region.
+// Keep in sync with the Upstash Redis database's own region.
+export const preferredRegion = "fra1";
+
 const MAX_QUESTION_CHARS = 2000;
 // Real course content's top-5-chunk retrievals run 15,500-17,000 characters
 // across every session (checked against public/data/week-*.bin) — this cap

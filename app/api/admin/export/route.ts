@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAllEvents } from "@/lib/server/analytics";
 
+// EU data residency: keep in sync with lib/server chat route's region.
+export const preferredRegion = "fra1";
+
 // Instructor-only export of the usage-metrics research log. Protected by a
 // bearer secret (ADMIN_SECRET) — not the student session cookie — since this
 // returns aggregate data across all students, not one student's own data.
