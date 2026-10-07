@@ -38,7 +38,7 @@ const TOOLS = [
   {
     name: "search_course_content",
     description:
-      "Search this Digital & AI Strategy course's lecture notes for content relevant to a question. Returns a few relevant excerpts, tagged by course week, to ground your answer — not a full document dump.",
+      "Search this course's lecture notes for content relevant to a question. Returns a few relevant excerpts, tagged by course week, to ground your answer — not a full document dump.",
     inputSchema: {
       type: "object",
       properties: {

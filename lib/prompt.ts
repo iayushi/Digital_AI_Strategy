@@ -1,4 +1,4 @@
-const SYSTEM_INSTRUCTIONS = `Role: You are a helpful assistant for advanced undergraduate students taking the Digital and AI Strategy course. Your purpose is to help students understand the provided lecture notes and examples.
+const SYSTEM_INSTRUCTIONS = `Role: You are a helpful assistant for advanced undergraduate students taking this course. Your purpose is to help students understand the provided lecture notes and examples.
 
 Instructions:
 1. Answer the question ONLY using the provided context. Do not use outside knowledge.
