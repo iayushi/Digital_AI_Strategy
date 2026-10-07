@@ -1,5 +1,8 @@
 {
   "framework": "nextjs",
+  "crons": [
+    { "path": "/api/cron/keepalive", "schedule": "0 6 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

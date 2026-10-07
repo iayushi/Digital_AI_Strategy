@@ -46,6 +46,13 @@ export async function kvIncrBy(key: string, delta: number): Promise<number> {
   return Number(result);
 }
 
+// Unconditional overwrite. Unlike kvIncrBy, safe to call more than once for
+// the same logical event (e.g. a cron keep-alive) — repeating a SET is a
+// no-op in effect, where repeating an INCRBY would double-count.
+export async function kvSet(key: string, value: string): Promise<void> {
+  await command("set", key, value);
+}
+
 // Sets key to value only if it doesn't already exist. Returns true if set.
 export async function kvSetIfAbsent(key: string, value: number): Promise<boolean> {
   const result = await command("set", key, value, "NX");
